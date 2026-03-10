@@ -9,7 +9,17 @@ export default function MonitoringPanel({ refreshKey }: Props) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
   useEffect(() => {
-    setLogs(getLogs());
+    let active = true;
+
+    getLogs().then((result) => {
+      if (active) {
+        setLogs(result);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
   }, [refreshKey]);
 
   return (

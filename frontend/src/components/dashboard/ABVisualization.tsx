@@ -14,22 +14,39 @@ const AMBER = "#facc15";
 const GREEN = "#22c55e";
 
 export default function ABVisualization({ refreshKey }: Props) {
-  const [metrics, setMetrics] = useState<SystemMetrics>(getMetrics());
+  const [metrics, setMetrics] = useState<SystemMetrics>({
+    requests: 0,
+    avg_latency: 0,
+    model_a_usage: 0,
+    model_b_usage: 0,
+    cache_hits: 0,
+    cache_misses: 0,
+    success_rate: 0,
+  });
   const [history, setHistory] = useState<{ time: string; a: number; b: number }[]>([]);
 
   useEffect(() => {
-    const m = getMetrics();
-    setMetrics(m);
-    if (m.requests > 0) {
-      setHistory(prev => [
-        ...prev.slice(-19),
-        {
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          a: m.model_a_usage,
-          b: m.model_b_usage,
-        },
-      ]);
-    }
+    let active = true;
+
+    getMetrics().then((m) => {
+      if (!active) return;
+
+      setMetrics(m);
+      if (m.requests > 0) {
+        setHistory(prev => [
+          ...prev.slice(-19),
+          {
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            a: m.model_a_usage,
+            b: m.model_b_usage,
+          },
+        ]);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
   }, [refreshKey]);
 
   const totalUsage = metrics.model_a_usage + metrics.model_b_usage;

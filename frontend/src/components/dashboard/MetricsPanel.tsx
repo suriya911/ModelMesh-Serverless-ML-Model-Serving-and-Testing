@@ -7,10 +7,28 @@ interface Props {
 }
 
 export default function MetricsPanel({ refreshKey }: Props) {
-  const [metrics, setMetrics] = useState<SystemMetrics>(getMetrics());
+  const [metrics, setMetrics] = useState<SystemMetrics>({
+    requests: 0,
+    avg_latency: 0,
+    model_a_usage: 0,
+    model_b_usage: 0,
+    cache_hits: 0,
+    cache_misses: 0,
+    success_rate: 0,
+  });
 
   useEffect(() => {
-    setMetrics(getMetrics());
+    let active = true;
+
+    getMetrics().then((result) => {
+      if (active) {
+        setMetrics(result);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
   }, [refreshKey]);
 
   const cacheTotal = metrics.cache_hits + metrics.cache_misses;

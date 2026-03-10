@@ -1,0 +1,10 @@
+.git
+.venv
+venv
+env
+frontend/node_modules
+frontend/dist
+modelmesh.db
+.env
+__pycache__
+*.pyc

@@ -10,16 +10,20 @@ export default function PredictionPanel({ onResult }: Props) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [targetModel, setTargetModel] = useState<'auto' | 'model_a' | 'model_b'>('auto');
+  const [error, setError] = useState<string | null>(null);
 
   const handlePredict = async () => {
     if (!input.trim()) return;
     setLoading(true);
+    setError(null);
     try {
       const result = await predict({
         input: input.trim(),
         model: targetModel === 'auto' ? undefined : targetModel,
       });
       onResult(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Prediction request failed");
     } finally {
       setLoading(false);
     }
@@ -82,6 +86,10 @@ export default function PredictionPanel({ onResult }: Props) {
           "Run Prediction"
         )}
       </button>
+
+      {error && (
+        <p className="font-mono text-[10px] text-destructive">{error}</p>
+      )}
     </div>
   );
 }

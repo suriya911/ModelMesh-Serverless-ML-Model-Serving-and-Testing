@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: modelmesh-api
+Version: 0.1.0
+Summary: Backend scaffold for ModelMesh
+Requires-Python: >=3.11
+License-File: LICENSE
+Requires-Dist: fastapi<1.0.0,>=0.116.0
+Requires-Dist: uvicorn[standard]<1.0.0,>=0.35.0
+Requires-Dist: pydantic<3.0.0,>=2.11.0
+Requires-Dist: huggingface_hub<2.0.0,>=1.1.0
+Requires-Dist: sqlalchemy<3.0.0,>=2.0.40
+Dynamic: license-file

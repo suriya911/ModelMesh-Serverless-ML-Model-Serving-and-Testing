@@ -1,7 +1,6 @@
 import AppLayout from "@/components/AppLayout";
 import MetricsPanel from "@/components/dashboard/MetricsPanel";
 import MonitoringPanel from "@/components/dashboard/MonitoringPanel";
-import { getMetrics } from "@/lib/ml-api";
 import { useState, useEffect } from "react";
 
 export default function System() {

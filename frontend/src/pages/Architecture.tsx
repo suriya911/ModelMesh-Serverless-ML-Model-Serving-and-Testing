@@ -3,10 +3,10 @@ import { ArrowRight } from "lucide-react";
 
 const steps = [
   { label: "User Request", desc: "Client sends prediction input", color: "text-foreground" },
-  { label: "API Gateway", desc: "Routes to Lambda function", color: "text-primary" },
-  { label: "A/B Router", desc: "Selects Model A or B", color: "text-secondary" },
+  { label: "API Gateway", desc: "Routes to FastAPI on AWS", color: "text-primary" },
+  { label: "Model Router", desc: "Selects active model and runtime", color: "text-secondary" },
   { label: "Cache Check", desc: "Redis lookup for cached result", color: "text-success" },
-  { label: "ML Inference", desc: "Model processes input", color: "text-primary" },
+  { label: "HF Runtime", desc: "Hugging Face-backed inference", color: "text-primary" },
   { label: "Response", desc: "Result returned with metadata", color: "text-foreground" },
 ];
 
@@ -42,23 +42,23 @@ export default function Architecture() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {[
           {
-            title: "A/B Testing Engine",
-            desc: "Randomly routes 50% of traffic to Model A (Logistic Regression) and 50% to Model B (Random Forest). Enables comparing model performance in production conditions.",
+            title: "Model Router",
+            desc: "The API resolves the requested model ID, applies routing policy, and decides whether the request can use a warm runtime or needs a fresh model load.",
             accent: "border-l-primary",
           },
           {
             title: "Caching Layer",
-            desc: "In-memory cache keyed by input hash. Reduces inference latency from ~150ms to <5ms for repeated inputs. Cache hit ratio is tracked in system metrics.",
+            desc: "Redis-backed response and warm-state caching reduces repeated work and supports low-cost serving for frequently used models.",
             accent: "border-l-success",
           },
           {
             title: "Model Serving",
-            desc: "Two ML models serve predictions concurrently. Model A uses Logistic Regression for fast binary classification. Model B uses Random Forest for multi-class prediction.",
+            desc: "Inference runtimes load Hugging Face models on demand, starting with CPU-friendly tasks and preserving a later upgrade path to GPU-backed services.",
             accent: "border-l-secondary",
           },
           {
             title: "Observability",
-            desc: "Every prediction is logged with model version, latency, cache status, and timestamp. Real-time metrics track request volume, latency distribution, and success rates.",
+            desc: "Every prediction is logged with model, latency, cache status, and timestamp. Metrics are exposed over HTTP so the dashboard can read live system state from AWS.",
             accent: "border-l-warning",
           },
         ].map((card) => (
@@ -76,11 +76,11 @@ export default function Architecture() {
         </h3>
         <div className="space-y-3">
           {[
-            { method: "POST", path: "/predict", desc: "Run inference with A/B routing" },
-            { method: "POST", path: "/predict/model-a", desc: "Run inference using Model A only" },
-            { method: "POST", path: "/predict/model-b", desc: "Run inference using Model B only" },
-            { method: "GET", path: "/metrics", desc: "Return system metrics" },
-            { method: "GET", path: "/logs", desc: "Return latest prediction logs" },
+            { method: "POST", path: "/v1/predictions", desc: "Run inference with model routing" },
+            { method: "POST", path: "/v1/comparisons", desc: "Start a model comparison job" },
+            { method: "GET", path: "/v1/comparisons/{job_id}", desc: "Read comparison status and result" },
+            { method: "GET", path: "/v1/system/metrics", desc: "Return system metrics" },
+            { method: "GET", path: "/v1/system/logs", desc: "Return latest prediction logs" },
           ].map((ep) => (
             <div key={ep.path} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0">
               <span className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded ${

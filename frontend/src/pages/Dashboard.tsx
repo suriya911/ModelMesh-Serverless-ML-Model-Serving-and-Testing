@@ -15,6 +15,7 @@ export default function Dashboard() {
   const [comparison, setComparison] = useState<ComparisonResult | null>(null);
   const [comparing, setComparing] = useState(false);
   const [activeTab, setActiveTab] = useState<'compare' | 'inference'>('compare');
+  const [comparisonError, setComparisonError] = useState<string | null>(null);
 
   const handleResult = useCallback((result: PredictionResult) => {
     setResults(prev => [result, ...prev].slice(0, 20));
@@ -23,9 +24,12 @@ export default function Dashboard() {
 
   const handleCompare = useCallback(async (dataSize: number, features: number, format: string) => {
     setComparing(true);
+    setComparisonError(null);
     try {
       const result = await compareModels(dataSize, features, format);
       setComparison(result);
+    } catch (err) {
+      setComparisonError(err instanceof Error ? err.message : "Comparison request failed");
     } finally {
       setComparing(false);
     }
@@ -67,6 +71,13 @@ export default function Dashboard() {
             <div className="lg:col-span-8">
               {comparison ? (
                 <ModelComparisonPanel comparison={comparison} />
+              ) : comparisonError ? (
+                <div className="bg-card border border-destructive/40 rounded-md p-12 flex items-center justify-center min-h-[400px]">
+                  <div className="text-center space-y-3">
+                    <div className="font-mono text-xs text-destructive uppercase tracking-wider">Comparison Failed</div>
+                    <p className="font-mono text-xs text-muted-foreground">{comparisonError}</p>
+                  </div>
+                </div>
               ) : (
                 <div className="bg-card border border-border rounded-md p-12 flex items-center justify-center min-h-[400px]">
                   <div className="text-center space-y-3">
