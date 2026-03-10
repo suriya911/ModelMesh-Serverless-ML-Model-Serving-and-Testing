@@ -23,12 +23,12 @@ function MetricRow({ label, a, b, format = "pct", higher = "better" }: {
   const bWins = higher === "better" ? diff < -0.001 : diff > 0.001;
 
   return (
-    <div className="grid grid-cols-[1fr_100px_100px] items-center py-2 border-b border-border/40 last:border-0">
+    <div className="grid grid-cols-1 sm:grid-cols-[1fr_100px_100px] items-start sm:items-center gap-1 sm:gap-0 py-2 border-b border-border/40 last:border-0">
       <span className="font-mono text-[11px] text-muted-foreground">{label}</span>
-      <span className={`font-mono text-xs text-right font-semibold ${aWins ? 'text-model-a' : 'text-foreground'}`}>
+      <span className={`font-mono text-xs sm:text-right font-semibold ${aWins ? 'text-model-a' : 'text-foreground'}`}>
         {fmt(a)} {aWins && <TrendingUp size={10} className="inline ml-1" />}
       </span>
-      <span className={`font-mono text-xs text-right font-semibold ${bWins ? 'text-model-b' : 'text-foreground'}`}>
+      <span className={`font-mono text-xs sm:text-right font-semibold ${bWins ? 'text-model-b' : 'text-foreground'}`}>
         {fmt(b)} {bWins && <TrendingUp size={10} className="inline ml-1" />}
       </span>
     </div>
@@ -83,7 +83,7 @@ export default function ModelComparisonPanel({ comparison }: Props) {
     <div className="space-y-6">
       {/* Dataset info bar */}
       <div className="bg-card border border-border rounded-md p-4">
-        <div className="flex flex-wrap gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {[
             { label: "Samples", value: ds.total_samples.toLocaleString() },
             { label: "Features", value: ds.features },
@@ -91,16 +91,16 @@ export default function ModelComparisonPanel({ comparison }: Props) {
             { label: "Format", value: ds.format.toUpperCase() },
             { label: "Train/Test", value: `${ds.train_split * 100}/${ds.test_split * 100}` },
           ].map(item => (
-            <div key={item.label} className="flex items-center gap-2">
+            <div key={item.label} className="flex items-center justify-between sm:justify-start gap-2">
               <span className="font-mono text-[10px] text-muted-foreground uppercase">{item.label}:</span>
-              <span className="font-mono text-xs text-foreground font-semibold">{item.value}</span>
+              <span className="font-mono text-xs text-foreground font-semibold text-right sm:text-left">{item.value}</span>
             </div>
           ))}
         </div>
       </div>
 
       {/* Header */}
-      <div className="grid grid-cols-[1fr_100px_100px] items-center pb-2 border-b border-border">
+      <div className="hidden sm:grid sm:grid-cols-[1fr_100px_100px] items-center pb-2 border-b border-border">
         <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">Metric</span>
         <span className="font-mono text-[10px] text-model-a uppercase tracking-wider text-right">
           Model A<br /><span className="text-[8px] opacity-70">Logistic Reg.</span>
@@ -183,7 +183,7 @@ export default function ModelComparisonPanel({ comparison }: Props) {
         <h4 className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-3">
           Latency Comparison (ms)
         </h4>
-        <div className="grid grid-cols-[1fr_100px_100px] items-center pb-2 mb-2 border-b border-border/40">
+        <div className="hidden sm:grid sm:grid-cols-[1fr_100px_100px] items-center pb-2 mb-2 border-b border-border/40">
           <span className="font-mono text-[9px] text-muted-foreground uppercase">Percentile</span>
           <span className="font-mono text-[9px] text-model-a text-right uppercase">Model A</span>
           <span className="font-mono text-[9px] text-model-b text-right uppercase">Model B</span>

@@ -45,12 +45,12 @@ export default function Dashboard() {
       </div>
 
       {/* Tab switcher */}
-      <div className="flex gap-1 mb-6 bg-card border border-border rounded-md p-1 w-fit">
+      <div className="grid grid-cols-2 gap-1 mb-6 bg-card border border-border rounded-md p-1 w-full sm:w-fit sm:inline-grid">
         {(['compare', 'inference'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded font-mono text-xs font-semibold transition-colors ${
+            className={`px-2 sm:px-4 py-2 rounded font-mono text-[11px] sm:text-xs font-semibold transition-colors text-center ${
               activeTab === tab
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:text-foreground'
