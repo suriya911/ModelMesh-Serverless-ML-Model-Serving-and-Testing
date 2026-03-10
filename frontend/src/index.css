@@ -1,0 +1,107 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-mono: 'IBM Plex Mono', monospace;
+    --font-sans: 'Inter', sans-serif;
+
+    --background: 222.2 47.4% 3.9%;
+    --foreground: 214.3 31.8% 91.4%;
+
+    --card: 222.2 47.4% 7.1%;
+    --card-foreground: 214.3 31.8% 91.4%;
+
+    --popover: 222.2 47.4% 7.1%;
+    --popover-foreground: 214.3 31.8% 91.4%;
+
+    --primary: 187 80% 53%;
+    --primary-foreground: 222.2 47.4% 3.9%;
+
+    --secondary: 45 93% 54%;
+    --secondary-foreground: 222.2 47.4% 3.9%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 55.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 214.3 31.8% 91.4%;
+
+    --destructive: 0 62.8% 50.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 222.2 47.4% 3.9%;
+
+    --warning: 50 98% 64%;
+    --warning-foreground: 222.2 47.4% 3.9%;
+
+    --model-a: 187 80% 53%;
+    --model-b: 45 93% 54%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 187 80% 53%;
+
+    --radius: 0.375rem;
+
+    --sidebar-background: 222.2 47.4% 5.5%;
+    --sidebar-foreground: 214.3 31.8% 91.4%;
+    --sidebar-primary: 187 80% 53%;
+    --sidebar-primary-foreground: 222.2 47.4% 3.9%;
+    --sidebar-accent: 217.2 32.6% 12%;
+    --sidebar-accent-foreground: 214.3 31.8% 91.4%;
+    --sidebar-border: 217.2 32.6% 17.5%;
+    --sidebar-ring: 187 80% 53%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: var(--font-sans);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-mono);
+  }
+
+  code, pre, .font-mono {
+    font-family: var(--font-mono) !important;
+  }
+}
+
+@layer utilities {
+  .trace-line {
+    background: linear-gradient(90deg, hsl(var(--model-a)), transparent);
+    height: 2px;
+    animation: trace 0.6s ease-out forwards;
+  }
+
+  .trace-line-b {
+    background: linear-gradient(90deg, hsl(var(--model-b)), transparent);
+    height: 2px;
+    animation: trace 0.6s ease-out forwards;
+  }
+}
+
+@keyframes trace {
+  from { width: 0; opacity: 1; }
+  to { width: 100%; opacity: 0; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
