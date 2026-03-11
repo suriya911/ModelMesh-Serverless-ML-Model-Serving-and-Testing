@@ -99,6 +99,7 @@ jobs:
             -var="hf_provider=${{ vars.HF_PROVIDER }}" \
             -var="hf_timeout_seconds=${{ vars.HF_TIMEOUT_SECONDS }}" \
             -var="database_url=${{ vars.DATABASE_URL }}" \
+            -var="redis_url=${{ vars.REDIS_URL }}" \
             -var="enable_rds=${{ vars.ENABLE_RDS }}" \
             -var="enable_cloudfront_https=${{ vars.ENABLE_CLOUDFRONT_HTTPS }}"
 
@@ -106,6 +107,57 @@ jobs:
         id: backend_url
         working-directory: infra/terraform
         run: echo "backend_url=$(terraform output -raw backend_url)" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test backend API
+        env:
+          BACKEND_URL: ${{ steps.backend_url.outputs.backend_url }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          base = os.environ.get("BACKEND_URL", "").rstrip("/")
+          if not base:
+              print("BACKEND_URL output is empty.")
+              sys.exit(1)
+
+          def request(path: str, method: str = "GET", body: dict | None = None):
+              data = None
+              headers = {}
+              if body is not None:
+                  data = json.dumps(body).encode("utf-8")
+                  headers["Content-Type"] = "application/json"
+              req = urllib.request.Request(f"{base}{path}", data=data, method=method, headers=headers)
+              with urllib.request.urlopen(req, timeout=60) as resp:
+                  return resp.status, json.loads(resp.read().decode("utf-8"))
+
+          try:
+              status, health = request("/health")
+              assert status == 200 and health.get("status") == "ok", "health check failed"
+
+              status, models = request("/v1/models")
+              assert status == 200 and isinstance(models, list) and len(models) >= 1, "model list empty"
+
+              status, pred = request(
+                  "/v1/predictions",
+                  method="POST",
+                  body={"input": "ModelMesh CI smoke test input", "routing_mode": "auto"},
+              )
+              assert status == 200 and pred.get("id") and pred.get("prediction"), "prediction response invalid"
+
+              status, logs = request("/v1/system/logs")
+              assert status == 200 and isinstance(logs, list), "logs response invalid"
+              pred_id = pred["id"]
+              assert any(item.get("prediction_id") == pred_id for item in logs), "prediction log not persisted"
+          except (AssertionError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError) as exc:
+              print(f"Smoke test failed: {exc}")
+              sys.exit(1)
+
+          print("Smoke test passed.")
+          PY
 
   update-vercel:
     runs-on: ubuntu-latest

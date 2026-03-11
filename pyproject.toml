@@ -10,6 +10,8 @@ dependencies = [
   "huggingface_hub>=1.1.0,<2.0.0",
   "sqlalchemy>=2.0.40,<3.0.0",
   "psycopg[binary]>=3.2.0,<4.0.0",
+  "redis>=5.2.0,<6.0.0",
+  "alembic>=1.14.0,<2.0.0",
 ]
 
 [build-system]

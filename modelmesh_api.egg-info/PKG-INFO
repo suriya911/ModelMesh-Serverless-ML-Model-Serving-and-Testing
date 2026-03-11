@@ -9,4 +9,7 @@ Requires-Dist: uvicorn[standard]<1.0.0,>=0.35.0
 Requires-Dist: pydantic<3.0.0,>=2.11.0
 Requires-Dist: huggingface_hub<2.0.0,>=1.1.0
 Requires-Dist: sqlalchemy<3.0.0,>=2.0.40
+Requires-Dist: psycopg[binary]<4.0.0,>=3.2.0
+Requires-Dist: redis<6.0.0,>=5.2.0
+Requires-Dist: alembic<2.0.0,>=1.14.0
 Dynamic: license-file

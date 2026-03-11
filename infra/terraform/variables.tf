@@ -51,6 +51,12 @@ variable "database_url" {
   default     = "sqlite:///./modelmesh.db"
 }
 
+variable "redis_url" {
+  description = "Redis URL for backend runtime cache/metrics."
+  type        = string
+  default     = ""
+}
+
 variable "deployment_target" {
   description = "Deployment target. Use ec2 or apprunner."
   type        = string
@@ -100,6 +106,12 @@ variable "db_allocated_storage" {
 
 variable "enable_cloudfront_https" {
   description = "Enable CloudFront HTTPS in front of EC2 backend."
+  type        = bool
+  default     = true
+}
+
+variable "enable_local_redis" {
+  description = "Enable local Redis container on EC2 and wire REDIS_URL."
   type        = bool
   default     = true
 }

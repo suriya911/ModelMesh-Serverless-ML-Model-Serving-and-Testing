@@ -4,14 +4,14 @@ import os
 from datetime import UTC, datetime
 from random import Random
 from time import perf_counter
-from typing import Dict, List
+from typing import Dict
 from uuid import uuid4
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from apps.api.services.db import init_db
+from apps.api.services.db import run_migrations
 from apps.api.services.huggingface_inference import (
     HuggingFaceInferenceClient,
     HuggingFaceInferenceError,
@@ -22,6 +22,7 @@ from apps.api.services.model_registry import (
     seed_models,
 )
 from apps.api.services.prediction_logs import create_log, list_logs as list_persisted_logs
+from apps.api.services.runtime_state import RuntimeStateStore
 
 from shared.schemas.contracts import (
     ComparisonJob,
@@ -60,19 +61,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_cache: Dict[str, PredictionResult] = {}
 _comparisons: Dict[str, ComparisonJob] = {}
-_metrics = SystemMetrics(
-    requests=0,
-    avg_latency=0,
-    model_a_usage=0,
-    model_b_usage=0,
-    cache_hits=0,
-    cache_misses=0,
-    success_rate=100.0,
-)
-_total_latency = 0
 _inference_client = HuggingFaceInferenceClient()
+_runtime_state = RuntimeStateStore()
 
 
 def _timestamp() -> str:
@@ -172,7 +163,7 @@ def _append_log(result: PredictionResult, input_hash: str) -> None:
 
 @app.on_event("startup")
 def startup() -> None:
-    init_db()
+    run_migrations()
     seed_models()
 
 
@@ -188,13 +179,12 @@ def list_models() -> list[ModelRecord]:
 
 @app.post("/v1/predictions", response_model=PredictionResult)
 def create_prediction(request: PredictionRequest) -> PredictionResult:
-    global _total_latency
-
     input_hash = _hash_input(request.input)
     target_model = request.model_id or ("model_a" if int(input_hash[:1], 16) % 2 == 0 else "model_b")
     cache_key = f"{input_hash}:{target_model}"
 
-    if cached := _cache.get(cache_key):
+    cached = _runtime_state.get_cached_prediction(cache_key)
+    if cached:
         cached_result = cached.model_copy(
             update={
                 "id": f"pred_{uuid4().hex[:10]}",
@@ -203,8 +193,7 @@ def create_prediction(request: PredictionRequest) -> PredictionResult:
                 "timestamp": _timestamp(),
             }
         )
-        _metrics.cache_hits += 1
-        _metrics.requests += 1
+        _runtime_state.record_prediction(target_model, latency_ms=3, cached=True, success=True)
         _append_log(cached_result, input_hash)
         return cached_result
 
@@ -216,13 +205,9 @@ def create_prediction(request: PredictionRequest) -> PredictionResult:
     try:
         hf_prediction = _inference_client.text_classification(model_record.hf_repo_id, request.input)
     except HuggingFaceInferenceError as exc:
+        _runtime_state.record_prediction(target_model, latency_ms=0, cached=False, success=False)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     latency = max(1, round((perf_counter() - started_at) * 1000))
-
-    if target_model == "model_a":
-        _metrics.model_a_usage += 1
-    else:
-        _metrics.model_b_usage += 1
 
     result = PredictionResult(
         id=f"pred_{uuid4().hex[:10]}",
@@ -233,20 +218,15 @@ def create_prediction(request: PredictionRequest) -> PredictionResult:
         timestamp=_timestamp(),
         cached=False,
     )
-    _cache[cache_key] = result
-    _metrics.cache_misses += 1
-    _metrics.requests += 1
-    _total_latency += latency
-    usage_total = _metrics.model_a_usage + _metrics.model_b_usage
-    _metrics.avg_latency = round(_total_latency / usage_total) if usage_total else 0
-    _metrics.success_rate = 99.5
+    _runtime_state.set_cached_prediction(cache_key, result)
+    _runtime_state.record_prediction(target_model, latency_ms=latency, cached=False, success=True)
     _append_log(result, input_hash)
     return result
 
 
 @app.get("/v1/system/metrics", response_model=SystemMetrics)
 def get_metrics() -> SystemMetrics:
-    return _metrics
+    return _runtime_state.get_metrics()
 
 
 @app.get("/v1/system/logs", response_model=list[LogEntry])

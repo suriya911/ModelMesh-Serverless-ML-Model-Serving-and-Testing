@@ -3,3 +3,6 @@ uvicorn[standard]<1.0.0,>=0.35.0
 pydantic<3.0.0,>=2.11.0
 huggingface_hub<2.0.0,>=1.1.0
 sqlalchemy<3.0.0,>=2.0.40
+psycopg[binary]<4.0.0,>=3.2.0
+redis<6.0.0,>=5.2.0
+alembic<2.0.0,>=1.14.0

@@ -17,6 +17,8 @@ hf_timeout_seconds = 45
 
 # Used only when enable_rds = false.
 database_url = "sqlite:///./modelmesh.db"
+redis_url    = ""
+enable_local_redis = true
 
 db_name           = "modelmesh"
 db_username       = "modelmesh_admin"

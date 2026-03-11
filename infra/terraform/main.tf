@@ -25,6 +25,7 @@ data "aws_ami" "amazon_linux_2023" {
 locals {
   use_rds           = var.deployment_target == "ec2" && var.enable_rds
   enable_cloudfront = var.deployment_target == "ec2" && var.enable_cloudfront_https
+  use_local_redis   = var.deployment_target == "ec2" && var.enable_local_redis
   effective_database_url = local.use_rds ? format(
     "postgresql+psycopg://%s:%s@%s:5432/%s",
     var.db_username,
@@ -32,6 +33,7 @@ locals {
     aws_db_instance.postgres[0].address,
     var.db_name
   ) : var.database_url
+  effective_redis_url = local.use_local_redis ? "redis://127.0.0.1:6379/0" : var.redis_url
 }
 
 resource "aws_ecr_repository" "api" {
@@ -98,6 +100,7 @@ resource "aws_apprunner_service" "api" {
           HF_PROVIDER        = var.hf_provider
           HF_TIMEOUT_SECONDS = tostring(var.hf_timeout_seconds)
           DATABASE_URL       = var.database_url
+          REDIS_URL          = var.redis_url
           HF_API_TOKEN       = var.hf_api_token
         }
       }
@@ -248,12 +251,18 @@ resource "aws_instance" "api" {
 
     aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com"
 
+    if [ "${local.use_local_redis}" = "true" ]; then
+      docker rm -f modelmesh-redis || true
+      docker run -d --name modelmesh-redis --restart unless-stopped -p 127.0.0.1:6379:6379 redis:7-alpine
+    fi
+
     mkdir -p /opt/modelmesh
     cat > /opt/modelmesh/.env <<'ENVVARS'
     HF_API_TOKEN=${var.hf_api_token}
     HF_PROVIDER=${var.hf_provider}
     HF_TIMEOUT_SECONDS=${var.hf_timeout_seconds}
     DATABASE_URL=${local.effective_database_url}
+    REDIS_URL=${local.effective_redis_url}
     ALLOWED_ORIGINS=${var.allowed_origins}
     ENVVARS
 

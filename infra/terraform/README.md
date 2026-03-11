@@ -4,6 +4,7 @@ This Terraform config supports:
 
 - `deployment_target = "ec2"` (default): EC2 backend, optional RDS Postgres, optional CloudFront HTTPS
 - `deployment_target = "apprunner"`: App Runner backend
+- local Redis sidecar on EC2 (`enable_local_redis = true`) for runtime cache/metrics state
 
 For your account (App Runner subscription error), use the EC2 path.
 
@@ -34,6 +35,7 @@ Set at minimum in `terraform.tfvars`:
 - `enable_rds = true`
 - `db_password = "strong_password_here"`
 - `enable_cloudfront_https = true`
+- `enable_local_redis = true`
 
 ## 3. Init Terraform and create ECR first
 
