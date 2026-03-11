@@ -37,23 +37,21 @@ jobs:
 
       - name: Terraform init
         working-directory: infra/terraform
-        run: terraform init -input=false
-
-      - name: Terraform apply ECR only
-        working-directory: infra/terraform
         run: |
-          terraform apply -auto-approve \
-            -target=aws_ecr_repository.api \
-            -var="aws_region=${{ vars.AWS_REGION }}" \
-            -var="service_name=${{ vars.SERVICE_NAME }}" \
-            -var="ecr_repository_name=${{ vars.ECR_REPOSITORY_NAME }}" \
-            -var="image_tag=${{ vars.IMAGE_TAG }}" \
-            -var="deployment_target=${{ vars.DEPLOYMENT_TARGET }}" \
-            -var="allowed_origins=${{ vars.ALLOWED_ORIGINS }}" \
-            -var="hf_api_token=${{ secrets.HF_API_TOKEN }}" \
-            -var="db_password=${{ secrets.DB_PASSWORD }}" \
-            -var="enable_rds=${{ vars.ENABLE_RDS }}" \
-            -var="enable_cloudfront_https=${{ vars.ENABLE_CLOUDFRONT_HTTPS }}"
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}"
+
+      - name: Ensure ECR repository exists
+        run: |
+          aws ecr describe-repositories --repository-names "${{ vars.ECR_REPOSITORY_NAME }}" --region "${{ vars.AWS_REGION }}" >/dev/null 2>&1 || \
+          aws ecr create-repository --repository-name "${{ vars.ECR_REPOSITORY_NAME }}" --region "${{ vars.AWS_REGION }}"
+
+      - name: Import ECR into Terraform state (idempotent)
+        working-directory: infra/terraform
+        run: terraform import aws_ecr_repository.api "${{ vars.ECR_REPOSITORY_NAME }}" || true
 
       - name: Resolve AWS account
         id: account
