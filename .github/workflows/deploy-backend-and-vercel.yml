@@ -115,6 +115,7 @@ jobs:
           python - <<'PY'
           import json
           import os
+          import time
           import sys
           import urllib.error
           import urllib.request
@@ -124,31 +125,53 @@ jobs:
               print("BACKEND_URL output is empty.")
               sys.exit(1)
 
-          def request(path: str, method: str = "GET", body: dict | None = None):
+          def request(path: str, method: str = "GET", body: dict | None = None, timeout: int = 60):
               data = None
               headers = {}
               if body is not None:
                   data = json.dumps(body).encode("utf-8")
                   headers["Content-Type"] = "application/json"
               req = urllib.request.Request(f"{base}{path}", data=data, method=method, headers=headers)
-              with urllib.request.urlopen(req, timeout=60) as resp:
+              with urllib.request.urlopen(req, timeout=timeout) as resp:
                   return resp.status, json.loads(resp.read().decode("utf-8"))
 
+          def request_with_retry(path: str, method: str = "GET", body: dict | None = None, attempts: int = 12, timeout: int = 90):
+              last_exc = None
+              for attempt in range(1, attempts + 1):
+                  try:
+                      return request(path, method=method, body=body, timeout=timeout)
+                  except urllib.error.HTTPError as exc:
+                      # Retry on transient edge/origin readiness errors.
+                      if exc.code in {502, 503, 504}:
+                          last_exc = exc
+                      else:
+                          raise
+                  except (urllib.error.URLError, TimeoutError) as exc:
+                      last_exc = exc
+
+                  wait_seconds = min(5 * attempt, 30)
+                  print(f"Retrying {path} ({attempt}/{attempts}) after {wait_seconds}s: {last_exc}")
+                  time.sleep(wait_seconds)
+
+              raise last_exc if last_exc else RuntimeError(f"request failed for {path}")
+
           try:
-              status, health = request("/health")
+              status, health = request_with_retry("/health")
               assert status == 200 and health.get("status") == "ok", "health check failed"
 
-              status, models = request("/v1/models")
+              status, models = request_with_retry("/v1/models")
               assert status == 200 and isinstance(models, list) and len(models) >= 1, "model list empty"
 
-              status, pred = request(
+              status, pred = request_with_retry(
                   "/v1/predictions",
                   method="POST",
                   body={"input": "ModelMesh CI smoke test input", "routing_mode": "auto"},
+                  attempts=6,
+                  timeout=120,
               )
               assert status == 200 and pred.get("id") and pred.get("prediction"), "prediction response invalid"
 
-              status, logs = request("/v1/system/logs")
+              status, logs = request_with_retry("/v1/system/logs")
               assert status == 200 and isinstance(logs, list), "logs response invalid"
               pred_id = pred["id"]
               assert any(item.get("prediction_id") == pred_id for item in logs), "prediction log not persisted"
