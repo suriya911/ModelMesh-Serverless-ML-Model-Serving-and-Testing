@@ -29,10 +29,17 @@ export default function AppSidebar() {
         }`}
       >
         <div className="p-4 border-b border-sidebar-border">
-          <h1 className="font-mono text-sm font-bold tracking-tight text-sidebar-foreground">
-            <span className="text-primary">Model</span>
-            <span className="text-secondary">Mesh</span>
-          </h1>
+          <div className="flex items-center gap-2">
+            <img
+              src="/modelmesh-logo.svg"
+              alt="ModelMesh logo"
+              className="h-6 w-6 shrink-0 rounded-sm"
+            />
+            <h1 className="font-mono text-sm font-bold tracking-tight text-sidebar-foreground">
+              <span className="text-primary">Model</span>
+              <span className="text-secondary">Mesh</span>
+            </h1>
+          </div>
           <p className="font-mono text-[10px] text-muted-foreground mt-0.5">
             Serverless ML Serving
           </p>
