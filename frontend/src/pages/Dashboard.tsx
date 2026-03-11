@@ -63,12 +63,13 @@ export default function Dashboard() {
 
       {activeTab === 'compare' ? (
         <>
-          {/* Upload + Comparison */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
-            <div className="lg:col-span-4">
+          {/* Upload on top + Comparison below in one rectangular container */}
+          <div className="bg-card border border-border rounded-md p-4 sm:p-5 space-y-5 mb-8">
+            <div>
               <DataUploadPanel onCompare={handleCompare} loading={comparing} />
             </div>
-            <div className="lg:col-span-8">
+
+            <div className="border-t border-border pt-5">
               {comparison ? (
                 <ModelComparisonPanel comparison={comparison} />
               ) : comparisonError ? (
