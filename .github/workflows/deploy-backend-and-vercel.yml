@@ -52,7 +52,12 @@ jobs:
 
       - name: Import ECR into Terraform state (idempotent)
         working-directory: infra/terraform
-        run: terraform import aws_ecr_repository.api "${{ vars.ECR_REPOSITORY_NAME }}" || true
+        run: |
+          terraform import -input=false \
+            -var="allowed_origins=${{ vars.ALLOWED_ORIGINS }}" \
+            -var="hf_api_token=${{ secrets.HF_API_TOKEN }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            aws_ecr_repository.api "${{ vars.ECR_REPOSITORY_NAME }}" || true
 
       - name: Resolve AWS account
         id: account
