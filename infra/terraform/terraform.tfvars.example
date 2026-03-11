@@ -1,0 +1,25 @@
+aws_region          = "us-east-1"
+service_name        = "modelmesh-api"
+ecr_repository_name = "modelmesh-api"
+image_tag           = "latest"
+deployment_target   = "ec2"
+enable_rds          = true
+enable_cloudfront_https = true
+
+# Set this to your deployed Vercel URL.
+allowed_origins = "https://model-mesh-serverless-ml-model-serv.vercel.app"
+
+# Paste your Hugging Face token.
+hf_api_token = "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+hf_provider        = "auto"
+hf_timeout_seconds = 45
+
+# Used only when enable_rds = false.
+database_url = "sqlite:///./modelmesh.db"
+
+db_name           = "modelmesh"
+db_username       = "modelmesh_admin"
+db_password       = "replace_with_strong_password_16_chars_min"
+db_instance_class = "db.t4g.micro"
+db_allocated_storage = 20
