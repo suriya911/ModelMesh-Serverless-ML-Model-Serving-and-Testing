@@ -41,8 +41,36 @@ Set these in `GitHub -> Settings -> Secrets and variables -> Actions -> Variable
 - `HF_PROVIDER` = `auto`
 - `HF_TIMEOUT_SECONDS` = `45`
 - `DATABASE_URL` = `sqlite:///./modelmesh.db`
+- `TF_STATE_BUCKET` = `<your-terraform-state-bucket>`
+- `TF_STATE_KEY` = `modelmesh/prod/terraform.tfstate`
+- `TF_LOCK_TABLE` = `<your-terraform-lock-table>`
 
-## 3. Triggering CI/CD
+## 3. One-time Terraform remote state setup
+
+Create backend resources once (example):
+
+```powershell
+$AWS_REGION = "us-east-1"
+$TF_STATE_BUCKET = "modelmesh-terraform-state-<unique-suffix>"
+$TF_LOCK_TABLE = "modelmesh-terraform-locks"
+
+aws s3api create-bucket --bucket $TF_STATE_BUCKET --region $AWS_REGION
+aws s3api put-bucket-versioning --bucket $TF_STATE_BUCKET --versioning-configuration Status=Enabled
+aws dynamodb create-table --table-name $TF_LOCK_TABLE --attribute-definitions AttributeName=LockID,AttributeType=S --key-schema AttributeName=LockID,KeyType=HASH --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 --region $AWS_REGION
+```
+
+Migrate your existing local Terraform state to S3:
+
+```powershell
+cd D:\ModelMesh-Serverless-ML-Model-Serving-and-Testing\infra\terraform
+terraform init -migrate-state `
+  -backend-config="bucket=<your-terraform-state-bucket>" `
+  -backend-config="key=modelmesh/prod/terraform.tfstate" `
+  -backend-config="region=us-east-1" `
+  -backend-config="dynamodb_table=<your-terraform-lock-table>"
+```
+
+## 4. Triggering CI/CD
 
 ### Manual trigger
 
@@ -59,7 +87,7 @@ The workflow runs on `push` to `main` when these paths change:
 - `Dockerfile`
 - `pyproject.toml`
 
-## 4. Post-run checks
+## 5. Post-run checks
 
 After the workflow succeeds:
 
