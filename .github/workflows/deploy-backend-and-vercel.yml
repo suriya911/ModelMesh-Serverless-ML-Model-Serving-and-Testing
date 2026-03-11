@@ -1,0 +1,138 @@
+name: Deploy Backend And Update Vercel
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/**"
+      - "shared/**"
+      - "infra/terraform/**"
+      - "Dockerfile"
+      - "pyproject.toml"
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    outputs:
+      backend_url: ${{ steps.backend_url.outputs.backend_url }}
+    env:
+      TF_IN_AUTOMATION: true
+      AWS_REGION: ${{ vars.AWS_REGION }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        working-directory: infra/terraform
+        run: terraform init -input=false
+
+      - name: Terraform apply ECR only
+        working-directory: infra/terraform
+        run: |
+          terraform apply -auto-approve \
+            -target=aws_ecr_repository.api \
+            -var="aws_region=${{ vars.AWS_REGION }}" \
+            -var="service_name=${{ vars.SERVICE_NAME }}" \
+            -var="ecr_repository_name=${{ vars.ECR_REPOSITORY_NAME }}" \
+            -var="image_tag=${{ vars.IMAGE_TAG }}" \
+            -var="deployment_target=${{ vars.DEPLOYMENT_TARGET }}" \
+            -var="allowed_origins=${{ vars.ALLOWED_ORIGINS }}" \
+            -var="hf_api_token=${{ secrets.HF_API_TOKEN }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="enable_rds=${{ vars.ENABLE_RDS }}" \
+            -var="enable_cloudfront_https=${{ vars.ENABLE_CLOUDFRONT_HTTPS }}"
+
+      - name: Resolve AWS account
+        id: account
+        run: echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        env:
+          ACCOUNT_ID: ${{ steps.account.outputs.account_id }}
+        run: |
+          ECR_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ vars.ECR_REPOSITORY_NAME }}"
+          IMAGE_TAG="${{ vars.IMAGE_TAG }}"
+          docker build -t "${{ vars.ECR_REPOSITORY_NAME }}:${IMAGE_TAG}" .
+          docker tag "${{ vars.ECR_REPOSITORY_NAME }}:${IMAGE_TAG}" "${ECR_URI}:${IMAGE_TAG}"
+          docker push "${ECR_URI}:${IMAGE_TAG}"
+
+      - name: Terraform apply full stack
+        working-directory: infra/terraform
+        run: |
+          terraform apply -auto-approve \
+            -var="aws_region=${{ vars.AWS_REGION }}" \
+            -var="service_name=${{ vars.SERVICE_NAME }}" \
+            -var="ecr_repository_name=${{ vars.ECR_REPOSITORY_NAME }}" \
+            -var="image_tag=${{ vars.IMAGE_TAG }}" \
+            -var="deployment_target=${{ vars.DEPLOYMENT_TARGET }}" \
+            -var="allowed_origins=${{ vars.ALLOWED_ORIGINS }}" \
+            -var="hf_api_token=${{ secrets.HF_API_TOKEN }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}" \
+            -var="db_name=${{ vars.DB_NAME }}" \
+            -var="db_username=${{ vars.DB_USERNAME }}" \
+            -var="db_instance_class=${{ vars.DB_INSTANCE_CLASS }}" \
+            -var="db_allocated_storage=${{ vars.DB_ALLOCATED_STORAGE }}" \
+            -var="hf_provider=${{ vars.HF_PROVIDER }}" \
+            -var="hf_timeout_seconds=${{ vars.HF_TIMEOUT_SECONDS }}" \
+            -var="database_url=${{ vars.DATABASE_URL }}" \
+            -var="enable_rds=${{ vars.ENABLE_RDS }}" \
+            -var="enable_cloudfront_https=${{ vars.ENABLE_CLOUDFRONT_HTTPS }}"
+
+      - name: Read backend_url output
+        id: backend_url
+        working-directory: infra/terraform
+        run: echo "backend_url=$(terraform output -raw backend_url)" >> "$GITHUB_OUTPUT"
+
+  update-vercel:
+    runs-on: ubuntu-latest
+    needs: deploy-backend
+    if: ${{ needs.deploy-backend.outputs.backend_url != '' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Upsert Vercel production env vars
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          BACKEND_URL: ${{ needs.deploy-backend.outputs.backend_url }}
+        run: |
+          vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
+          vercel env rm VITE_API_BASE_URL production --yes --token "$VERCEL_TOKEN" || true
+          printf "%s" "$BACKEND_URL" | vercel env add VITE_API_BASE_URL production --token "$VERCEL_TOKEN"
+          vercel env rm BACKEND_URL production --yes --token "$VERCEL_TOKEN" || true
+          printf "%s" "$BACKEND_URL" | vercel env add BACKEND_URL production --token "$VERCEL_TOKEN"
+
+      - name: Trigger Vercel production deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          cd frontend
+          vercel deploy --prod --yes --token "$VERCEL_TOKEN"
