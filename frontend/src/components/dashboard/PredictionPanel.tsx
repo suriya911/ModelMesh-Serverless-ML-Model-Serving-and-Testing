@@ -51,7 +51,7 @@ export default function PredictionPanel({ onResult }: Props) {
         <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider block mb-1.5">
           Model Routing
         </label>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {(['auto', 'model_a', 'model_b'] as const).map((m) => (
             <button
               key={m}

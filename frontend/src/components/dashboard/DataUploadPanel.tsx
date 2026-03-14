@@ -43,7 +43,7 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
   };
 
   return (
-    <div className="bg-card border border-border rounded-md p-5 space-y-5">
+    <div className="space-y-5">
       <h3 className="font-mono text-xs font-semibold text-foreground uppercase tracking-wider flex items-center gap-2">
         <Upload size={14} className="text-primary" />
         Upload &amp; Configure Data
@@ -52,7 +52,7 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
       {/* File upload area */}
       <div
         onClick={() => fileRef.current?.click()}
-        className="border-2 border-dashed border-border rounded-md p-6 text-center cursor-pointer hover:border-primary/50 transition-colors group"
+        className="group cursor-pointer rounded-md border-2 border-dashed border-border p-5 text-center transition-colors hover:border-primary/50 sm:p-6"
       >
         <input
           ref={fileRef}
@@ -84,7 +84,7 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
         <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider block mb-2">
           Data Format
         </label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {DATA_FORMATS.map((f) => (
             <button
               key={f.value}
@@ -103,7 +103,7 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
       </div>
 
       {/* Dataset params */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
           <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider block mb-1.5">
             Samples
@@ -148,7 +148,7 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
         <div className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
           Sample CSV Files
         </div>
-        <div className="flex flex-col gap-1 font-mono text-[11px]">
+        <div className="flex flex-col gap-1 break-all font-mono text-[11px]">
           <a className="text-primary hover:underline" href="/samples/customer_churn_small.csv" target="_blank" rel="noreferrer">
             customer_churn_small.csv
           </a>

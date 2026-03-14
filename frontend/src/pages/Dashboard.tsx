@@ -53,14 +53,13 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="space-y-1 mb-6">
-        <h2 className="font-mono text-lg font-bold text-foreground">Dashboard</h2>
-        <p className="text-xs text-muted-foreground">
+      <div className="mb-6 space-y-1 sm:mb-8">
+        <h2 className="font-mono text-lg font-bold text-foreground sm:text-xl">Dashboard</h2>
+        <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
           Upload data, compare models, and run inference.
         </p>
       </div>
 
-      {/* Tab switcher */}
       <div className="grid grid-cols-2 gap-1 mb-6 bg-card border border-border rounded-md p-1 w-full sm:w-fit sm:inline-grid">
         {(['compare', 'inference'] as const).map((tab) => (
           <button
@@ -79,15 +78,14 @@ export default function Dashboard() {
 
       {activeTab === 'compare' ? (
         <>
-          {/* Upload on top + Comparison below in one rectangular container */}
-          <div className="bg-card border border-border rounded-md p-4 sm:p-5 space-y-5 mb-8">
-            <div>
+          <div className="mb-8 grid gap-5 xl:grid-cols-[minmax(360px,480px)_minmax(0,1fr)] xl:items-start">
+            <div className="rounded-md border border-border bg-card p-4 sm:p-5">
               <DataUploadPanel onCompare={handleCompare} loading={comparing} />
             </div>
 
-            <div className="border-t border-border pt-5">
+            <div className="rounded-md border border-border bg-card p-4 sm:p-5">
               {comparisonJob && !comparison && !comparisonError ? (
-                <div className="bg-card border border-primary/30 rounded-md p-6 sm:p-8 min-h-[220px] flex items-center justify-center">
+                <div className="flex min-h-[260px] items-center justify-center rounded-md border border-primary/30 bg-card p-6 sm:min-h-[320px] sm:p-8">
                   <div className="text-center space-y-3">
                     <div className="font-mono text-[10px] text-primary uppercase tracking-wider">
                       Comparison Job {comparisonJob.status}
@@ -112,20 +110,19 @@ export default function Dashboard() {
               {comparison ? (
                 <ModelComparisonPanel comparison={comparison} />
               ) : comparisonError ? (
-                <div className="bg-card border border-destructive/40 rounded-md p-12 flex items-center justify-center min-h-[400px]">
+                <div className="flex min-h-[260px] items-center justify-center rounded-md border border-destructive/40 bg-card p-8 sm:min-h-[320px] sm:p-12">
                   <div className="text-center space-y-3">
                     <div className="font-mono text-xs text-destructive uppercase tracking-wider">Comparison Failed</div>
                     <p className="font-mono text-xs text-muted-foreground">{comparisonError}</p>
                   </div>
                 </div>
               ) : (
-                <div className="bg-card border border-border rounded-md p-12 flex items-center justify-center min-h-[400px]">
+                <div className="flex min-h-[260px] items-center justify-center rounded-md border border-border bg-card p-8 sm:min-h-[320px] sm:p-12">
                   <div className="text-center space-y-3">
                     <div className="font-mono text-3xl text-muted-foreground/30">A ⟷ B</div>
-                    <p className="font-mono text-xs text-muted-foreground">
-                      Configure your dataset and click "Compare Models" to see<br />
-                      side-by-side metrics for Model A (Logistic Regression)<br />
-                      vs Model B (Random Forest).
+                    <p className="font-mono text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                      Configure your dataset and click "Compare Models" to see side-by-side metrics
+                      for Model A (Logistic Regression) and Model B (Random Forest).
                     </p>
                   </div>
                 </div>
@@ -142,11 +139,11 @@ export default function Dashboard() {
 
           {/* Testing section */}
           <div id="testing" className="mb-8">
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-              <div className="lg:col-span-2">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(340px,420px)_minmax(0,1fr)]">
+              <div>
                 <PredictionPanel onResult={handleResult} />
               </div>
-              <div className="lg:col-span-3">
+              <div className="min-w-0">
                 <ResultsPanel results={results} />
               </div>
             </div>

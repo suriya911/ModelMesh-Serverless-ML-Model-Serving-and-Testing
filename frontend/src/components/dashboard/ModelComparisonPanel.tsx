@@ -82,7 +82,7 @@ export default function ModelComparisonPanel({ comparison }: Props) {
   return (
     <div className="space-y-6">
       {/* Dataset info bar */}
-      <div className="bg-card border border-border rounded-md p-4">
+      <div className="overflow-hidden rounded-md border border-border bg-card p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           {[
             { label: "Samples", value: ds.total_samples.toLocaleString() },
@@ -111,7 +111,7 @@ export default function ModelComparisonPanel({ comparison }: Props) {
       </div>
 
       {/* Classification metrics */}
-      <div className="bg-card border border-border rounded-md p-4">
+      <div className="overflow-hidden rounded-md border border-border bg-card p-4">
         <h4 className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-3">
           Classification Metrics
         </h4>
@@ -125,7 +125,7 @@ export default function ModelComparisonPanel({ comparison }: Props) {
       </div>
 
       {/* Regression / loss metrics */}
-      <div className="bg-card border border-border rounded-md p-4">
+      <div className="overflow-hidden rounded-md border border-border bg-card p-4">
         <h4 className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-3">
           Loss &amp; Error Metrics
         </h4>
