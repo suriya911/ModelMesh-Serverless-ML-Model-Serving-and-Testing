@@ -25,7 +25,9 @@ data "aws_ami" "amazon_linux_2023" {
 locals {
   use_rds           = var.deployment_target == "ec2" && var.enable_rds
   enable_cloudfront = var.deployment_target == "ec2" && var.enable_cloudfront_https
+  use_managed_redis = var.deployment_target == "ec2" && var.enable_managed_redis
   use_local_redis   = var.deployment_target == "ec2" && var.enable_local_redis
+  enable_alarms     = var.deployment_target == "ec2" && var.enable_cloudwatch_alarms
   effective_database_url = local.use_rds ? format(
     "postgresql+psycopg://%s:%s@%s:5432/%s",
     var.db_username,
@@ -33,7 +35,11 @@ locals {
     aws_db_instance.postgres[0].address,
     var.db_name
   ) : var.database_url
-  effective_redis_url = local.use_local_redis ? "redis://127.0.0.1:6379/0" : var.redis_url
+  effective_redis_url = local.use_managed_redis ? format(
+    "redis://%s:6379/0",
+    aws_elasticache_replication_group.redis[0].primary_endpoint_address
+  ) : (local.use_local_redis ? "redis://127.0.0.1:6379/0" : var.redis_url)
+  alarm_actions = length(trimspace(var.alert_email)) > 0 ? [aws_sns_topic.alerts[0].arn] : []
 }
 
 resource "aws_ecr_repository" "api" {
@@ -100,7 +106,7 @@ resource "aws_apprunner_service" "api" {
           HF_PROVIDER        = var.hf_provider
           HF_TIMEOUT_SECONDS = tostring(var.hf_timeout_seconds)
           DATABASE_URL       = var.database_url
-          REDIS_URL          = var.redis_url
+          REDIS_URL          = local.effective_redis_url
           HF_API_TOKEN       = var.hf_api_token
         }
       }
@@ -227,6 +233,52 @@ resource "aws_db_instance" "postgres" {
   auto_minor_version_upgrade = true
 }
 
+resource "aws_security_group" "redis" {
+  count       = local.use_managed_redis ? 1 : 0
+  name        = "${var.service_name}-redis-sg"
+  description = "Allow Redis access from API EC2."
+  vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ec2_api[0].id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_elasticache_subnet_group" "redis" {
+  count      = local.use_managed_redis ? 1 : 0
+  name       = "${var.service_name}-redis-subnets"
+  subnet_ids = data.aws_subnets.default.ids
+}
+
+resource "aws_elasticache_replication_group" "redis" {
+  count                      = local.use_managed_redis ? 1 : 0
+  replication_group_id       = "${var.service_name}-redis"
+  description                = "ModelMesh managed Redis runtime state"
+  engine                     = "redis"
+  engine_version             = var.redis_engine_version
+  node_type                  = var.redis_node_type
+  port                       = 6379
+  parameter_group_name       = "default.redis7"
+  subnet_group_name          = aws_elasticache_subnet_group.redis[0].name
+  security_group_ids         = [aws_security_group.redis[0].id]
+  automatic_failover_enabled = var.redis_multi_az
+  multi_az_enabled           = var.redis_multi_az
+  num_cache_clusters         = var.redis_multi_az ? 2 : 1
+  at_rest_encryption_enabled = true
+  transit_encryption_enabled = false
+  apply_immediately          = true
+}
+
 resource "aws_instance" "api" {
   count                  = var.deployment_target == "ec2" ? 1 : 0
   ami                    = data.aws_ami.amazon_linux_2023.id
@@ -327,5 +379,132 @@ resource "aws_cloudfront_distribution" "api" {
 
   viewer_certificate {
     cloudfront_default_certificate = true
+  }
+}
+
+resource "aws_sns_topic" "alerts" {
+  count = local.enable_alarms && length(trimspace(var.alert_email)) > 0 ? 1 : 0
+  name  = "${var.service_name}-alerts"
+}
+
+resource "aws_sns_topic_subscription" "email" {
+  count     = local.enable_alarms && length(trimspace(var.alert_email)) > 0 ? 1 : 0
+  topic_arn = aws_sns_topic.alerts[0].arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+
+resource "aws_cloudwatch_metric_alarm" "ec2_status_check_failed" {
+  count               = local.enable_alarms ? 1 : 0
+  alarm_name          = "${var.service_name}-ec2-status-check-failed"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "StatusCheckFailed"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Maximum"
+  threshold           = 1
+  alarm_description   = "EC2 instance status checks are failing."
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+
+  dimensions = {
+    InstanceId = aws_instance.api[0].id
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "ec2_cpu_high" {
+  count               = local.enable_alarms ? 1 : 0
+  alarm_name          = "${var.service_name}-ec2-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 80
+  alarm_description   = "EC2 CPU utilization is high."
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+
+  dimensions = {
+    InstanceId = aws_instance.api[0].id
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_cpu_high" {
+  count               = local.enable_alarms && local.use_rds ? 1 : 0
+  alarm_name          = "${var.service_name}-rds-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/RDS"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 80
+  alarm_description   = "RDS CPU utilization is high."
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.postgres[0].id
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "rds_storage_low" {
+  count               = local.enable_alarms && local.use_rds ? 1 : 0
+  alarm_name          = "${var.service_name}-rds-free-storage-low"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "FreeStorageSpace"
+  namespace           = "AWS/RDS"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 2147483648
+  alarm_description   = "RDS free storage is below 2 GB."
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.postgres[0].id
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "redis_cpu_high" {
+  count               = local.enable_alarms && local.use_managed_redis ? 1 : 0
+  alarm_name          = "${var.service_name}-redis-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  metric_name         = "EngineCPUUtilization"
+  namespace           = "AWS/ElastiCache"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 80
+  alarm_description   = "ElastiCache Redis CPU utilization is high."
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+
+  dimensions = {
+    ReplicationGroupId = aws_elasticache_replication_group.redis[0].replication_group_id
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "cloudfront_5xx_high" {
+  count               = local.enable_alarms && local.enable_cloudfront ? 1 : 0
+  alarm_name          = "${var.service_name}-cloudfront-5xx-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "5xxErrorRate"
+  namespace           = "AWS/CloudFront"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 1
+  alarm_description   = "CloudFront 5xx error rate is elevated."
+  alarm_actions       = local.alarm_actions
+  ok_actions          = local.alarm_actions
+
+  dimensions = {
+    DistributionId = aws_cloudfront_distribution.api[0].id
+    Region         = "Global"
   }
 }

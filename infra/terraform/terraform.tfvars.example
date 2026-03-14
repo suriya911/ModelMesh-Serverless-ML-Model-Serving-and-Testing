@@ -17,8 +17,14 @@ hf_timeout_seconds = 45
 
 # Used only when enable_rds = false.
 database_url = "sqlite:///./modelmesh.db"
-redis_url    = ""
-enable_local_redis = true
+redis_url          = "" # Optional override for non-EC2 or external Redis.
+enable_managed_redis = true
+redis_node_type      = "cache.t4g.micro"
+redis_engine_version = "7.1"
+redis_multi_az       = true
+enable_local_redis   = false
+enable_cloudwatch_alarms = true
+alert_email              = ""
 
 db_name           = "modelmesh"
 db_username       = "modelmesh_admin"

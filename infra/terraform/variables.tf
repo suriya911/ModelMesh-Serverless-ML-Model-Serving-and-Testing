@@ -57,6 +57,30 @@ variable "redis_url" {
   default     = ""
 }
 
+variable "enable_managed_redis" {
+  description = "Enable managed ElastiCache Redis for backend runtime state."
+  type        = bool
+  default     = true
+}
+
+variable "redis_node_type" {
+  description = "ElastiCache node type."
+  type        = string
+  default     = "cache.t4g.micro"
+}
+
+variable "redis_engine_version" {
+  description = "Redis engine version for ElastiCache."
+  type        = string
+  default     = "7.1"
+}
+
+variable "redis_multi_az" {
+  description = "Enable Multi-AZ and automatic failover for Redis."
+  type        = bool
+  default     = true
+}
+
 variable "deployment_target" {
   description = "Deployment target. Use ec2 or apprunner."
   type        = string
@@ -113,5 +137,17 @@ variable "enable_cloudfront_https" {
 variable "enable_local_redis" {
   description = "Enable local Redis container on EC2 and wire REDIS_URL."
   type        = bool
+  default     = false
+}
+
+variable "enable_cloudwatch_alarms" {
+  description = "Enable CloudWatch alarms for backend infrastructure."
+  type        = bool
   default     = true
+}
+
+variable "alert_email" {
+  description = "Optional email address for CloudWatch alarm notifications."
+  type        = string
+  default     = ""
 }

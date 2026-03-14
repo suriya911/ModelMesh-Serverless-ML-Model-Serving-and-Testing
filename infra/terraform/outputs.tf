@@ -29,3 +29,13 @@ output "backend_url" {
   ) : try("https://${aws_apprunner_service.api[0].service_url}", null)
   description = "Backend base URL to set as VITE_API_BASE_URL."
 }
+
+output "redis_endpoint" {
+  value       = try(aws_elasticache_replication_group.redis[0].primary_endpoint_address, null)
+  description = "Managed Redis primary endpoint for backend runtime state."
+}
+
+output "alarm_topic_arn" {
+  value       = try(aws_sns_topic.alerts[0].arn, null)
+  description = "SNS topic ARN for alarm notifications."
+}
