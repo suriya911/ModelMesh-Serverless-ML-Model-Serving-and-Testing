@@ -5,11 +5,16 @@ apps/__init__.py
 apps/api/__init__.py
 apps/api/main.py
 apps/api/services/__init__.py
+apps/api/services/comparison_jobs.py
 apps/api/services/db.py
 apps/api/services/huggingface_inference.py
 apps/api/services/model_registry.py
 apps/api/services/prediction_logs.py
+apps/api/services/queue.py
 apps/api/services/runtime_state.py
+apps/api/services/storage.py
+apps/worker/__init__.py
+apps/worker/main.py
 modelmesh_api.egg-info/PKG-INFO
 modelmesh_api.egg-info/SOURCES.txt
 modelmesh_api.egg-info/dependency_links.txt

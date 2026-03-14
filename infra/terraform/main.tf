@@ -39,6 +39,7 @@ locals {
     "redis://%s:6379/0",
     aws_elasticache_replication_group.redis[0].primary_endpoint_address
   ) : (local.use_local_redis ? "redis://127.0.0.1:6379/0" : var.redis_url)
+  effective_comparison_queue_url = var.deployment_target == "ec2" ? aws_sqs_queue.comparison_jobs.id : ""
   alarm_actions = length(trimspace(var.alert_email)) > 0 ? [aws_sns_topic.alerts[0].arn] : []
 }
 
@@ -63,6 +64,13 @@ resource "aws_s3_bucket_public_access_block" "datasets" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+resource "aws_sqs_queue" "comparison_jobs" {
+  name                       = "${var.service_name}-comparison-jobs"
+  visibility_timeout_seconds = 180
+  message_retention_seconds  = 345600
+  receive_wait_time_seconds  = 20
 }
 
 resource "aws_iam_role" "apprunner_ecr_access" {
@@ -122,6 +130,7 @@ resource "aws_apprunner_service" "api" {
           DATABASE_URL       = var.database_url
           REDIS_URL          = local.effective_redis_url
           DATASET_BUCKET     = aws_s3_bucket.datasets.bucket
+          COMPARISON_QUEUE_URL = local.effective_comparison_queue_url
           HF_API_TOKEN       = var.hf_api_token
         }
       }
@@ -195,6 +204,29 @@ resource "aws_iam_role_policy" "ec2_s3_datasets" {
           aws_s3_bucket.datasets.arn,
           "${aws_s3_bucket.datasets.arn}/*",
         ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "ec2_sqs_comparisons" {
+  count = var.deployment_target == "ec2" ? 1 : 0
+  name  = "${var.service_name}-comparison-sqs"
+  role  = aws_iam_role.ec2_instance_role[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage",
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:ChangeMessageVisibility",
+        ]
+        Resource = aws_sqs_queue.comparison_jobs.arn
       }
     ]
   })
@@ -356,12 +388,16 @@ resource "aws_instance" "api" {
     DATABASE_URL=${local.effective_database_url}
     REDIS_URL=${local.effective_redis_url}
     DATASET_BUCKET=${aws_s3_bucket.datasets.bucket}
+    COMPARISON_QUEUE_URL=${local.effective_comparison_queue_url}
     ALLOWED_ORIGINS=${var.allowed_origins}
+    AWS_REGION=${data.aws_region.current.name}
     ENVVARS
 
     docker pull "$IMAGE"
     docker rm -f modelmesh-api || true
+    docker rm -f modelmesh-worker || true
     docker run -d --name modelmesh-api --restart unless-stopped --env-file /opt/modelmesh/.env -p 80:8000 "$IMAGE"
+    docker run -d --name modelmesh-worker --restart unless-stopped --env-file /opt/modelmesh/.env "$IMAGE" python -m apps.worker.main
   EOT
 }
 

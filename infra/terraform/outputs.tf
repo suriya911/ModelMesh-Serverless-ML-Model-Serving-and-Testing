@@ -44,3 +44,8 @@ output "dataset_bucket_name" {
   value       = aws_s3_bucket.datasets.bucket
   description = "S3 bucket used for uploaded comparison datasets."
 }
+
+output "comparison_queue_url" {
+  value       = aws_sqs_queue.comparison_jobs.id
+  description = "SQS queue URL for async comparison jobs."
+}

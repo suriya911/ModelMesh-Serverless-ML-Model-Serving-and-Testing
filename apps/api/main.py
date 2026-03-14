@@ -28,6 +28,7 @@ from apps.api.services.model_registry import (
     seed_models,
 )
 from apps.api.services.prediction_logs import create_log, list_logs as list_persisted_logs
+from apps.api.services.queue import QueuePublishError, enqueue_comparison_job, queue_enabled
 from apps.api.services.runtime_state import RuntimeStateStore
 from apps.api.services.storage import DatasetStorageError, create_dataset_upload
 
@@ -192,7 +193,14 @@ def get_logs() -> list[LogEntry]:
 def create_comparison(request: ComparisonJobCreateRequest, background_tasks: BackgroundTasks) -> ComparisonJob:
     job_id = f"cmp_{uuid4().hex[:10]}"
     job = create_job(job_id, request)
-    background_tasks.add_task(_process_comparison_job, job_id, request)
+    if queue_enabled():
+        try:
+            enqueue_comparison_job(job_id, request)
+        except QueuePublishError as exc:
+            fail_job(job_id, str(exc))
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+    else:
+        background_tasks.add_task(_process_comparison_job, job_id, request)
     return job
 
 
