@@ -2,7 +2,14 @@ import { useState, useRef } from "react";
 import { Upload, FileText, Table2, Loader2 } from "lucide-react";
 
 interface Props {
-  onCompare: (dataSize: number, features: number, format: string, datasetName?: string | null, file?: File | null) => void;
+  onCompare: (
+    dataSize: number,
+    features: number,
+    format: string,
+    datasetName?: string | null,
+    file?: File | null,
+    kaggleUrl?: string | null,
+  ) => void;
   loading: boolean;
 }
 
@@ -17,6 +24,7 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
   const [format, setFormat] = useState("csv");
   const [fileName, setFileName] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [kaggleUrl, setKaggleUrl] = useState("");
   const [samples, setSamples] = useState(1000);
   const [features, setFeatures] = useState(8);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -120,6 +128,36 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
         </div>
       </div>
 
+      <div>
+        <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider block mb-1.5">
+          Kaggle Dataset / Competition URL
+        </label>
+        <input
+          type="url"
+          value={kaggleUrl}
+          onChange={(e) => setKaggleUrl(e.target.value)}
+          placeholder="https://www.kaggle.com/datasets/... or /competitions/..."
+          className="w-full bg-background border border-border rounded-md px-3 py-2 font-mono text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+          If provided, backend downloads the dataset from Kaggle and infers samples/features automatically.
+        </p>
+      </div>
+
+      <div className="rounded-md border border-border bg-background/60 p-3">
+        <div className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
+          Sample CSV Files
+        </div>
+        <div className="flex flex-col gap-1 font-mono text-[11px]">
+          <a className="text-primary hover:underline" href="/samples/customer_churn_small.csv" target="_blank" rel="noreferrer">
+            customer_churn_small.csv
+          </a>
+          <a className="text-primary hover:underline" href="/samples/credit_risk_small.csv" target="_blank" rel="noreferrer">
+            credit_risk_small.csv
+          </a>
+        </div>
+      </div>
+
       {/* Train/test split info */}
       <div className="flex items-center gap-3">
         <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
@@ -132,7 +170,7 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
 
       {/* Compare button */}
       <button
-        onClick={() => onCompare(samples, features, format, fileName, selectedFile)}
+        onClick={() => onCompare(samples, features, format, fileName, selectedFile, kaggleUrl.trim() || null)}
         disabled={loading}
         className="w-full py-3 rounded-md font-mono text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
       >

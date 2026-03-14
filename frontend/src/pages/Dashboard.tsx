@@ -23,19 +23,26 @@ export default function Dashboard() {
     setRefreshKey(k => k + 1);
   }, []);
 
-  const handleCompare = useCallback(async (dataSize: number, features: number, format: string, datasetName?: string | null, file?: File | null) => {
+  const handleCompare = useCallback(async (
+    dataSize: number,
+    features: number,
+    format: string,
+    datasetName?: string | null,
+    file?: File | null,
+    kaggleUrl?: string | null,
+  ) => {
     setComparing(true);
     setComparisonError(null);
     setComparison(null);
     setComparisonJob(null);
     try {
       let datasetS3Key: string | undefined;
-      if (file) {
+      if (file && !kaggleUrl) {
         const upload = await uploadDatasetFile(file);
         datasetS3Key = upload.objectKey;
       }
 
-      const result = await compareModels(dataSize, features, format, datasetName, datasetS3Key, setComparisonJob);
+      const result = await compareModels(dataSize, features, format, datasetName, datasetS3Key, kaggleUrl, setComparisonJob);
       setComparison(result);
     } catch (err) {
       setComparisonError(err instanceof Error ? err.message : "Comparison request failed");

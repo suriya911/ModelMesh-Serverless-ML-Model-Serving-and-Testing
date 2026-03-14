@@ -124,14 +124,16 @@ resource "aws_apprunner_service" "api" {
         port = "8000"
 
         runtime_environment_variables = {
-          ALLOWED_ORIGINS    = var.allowed_origins
-          HF_PROVIDER        = var.hf_provider
-          HF_TIMEOUT_SECONDS = tostring(var.hf_timeout_seconds)
-          DATABASE_URL       = var.database_url
-          REDIS_URL          = local.effective_redis_url
-          DATASET_BUCKET     = aws_s3_bucket.datasets.bucket
+          ALLOWED_ORIGINS      = var.allowed_origins
+          HF_PROVIDER          = var.hf_provider
+          HF_TIMEOUT_SECONDS   = tostring(var.hf_timeout_seconds)
+          DATABASE_URL         = var.database_url
+          REDIS_URL            = local.effective_redis_url
+          DATASET_BUCKET       = aws_s3_bucket.datasets.bucket
           COMPARISON_QUEUE_URL = local.effective_comparison_queue_url
-          HF_API_TOKEN       = var.hf_api_token
+          KAGGLE_USERNAME      = var.kaggle_username
+          KAGGLE_KEY           = var.kaggle_key
+          HF_API_TOKEN         = var.hf_api_token
         }
       }
     }
@@ -391,6 +393,8 @@ resource "aws_instance" "api" {
     COMPARISON_QUEUE_URL=${local.effective_comparison_queue_url}
     ALLOWED_ORIGINS=${var.allowed_origins}
     AWS_REGION=${data.aws_region.current.name}
+    KAGGLE_USERNAME=${var.kaggle_username}
+    KAGGLE_KEY=${var.kaggle_key}
     ENVVARS
 
     docker pull "$IMAGE"

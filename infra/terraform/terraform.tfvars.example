@@ -11,6 +11,8 @@ allowed_origins = "https://model-mesh-serverless-ml-model-serv.vercel.app"
 
 # Paste your Hugging Face token.
 hf_api_token = "hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+kaggle_username = "your-kaggle-username"
+# kaggle_key should be passed securely via CI secret or local tfvars, not committed.
 
 hf_provider        = "auto"
 hf_timeout_seconds = 45

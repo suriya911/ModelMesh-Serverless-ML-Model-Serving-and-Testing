@@ -8,6 +8,7 @@ apps/api/services/__init__.py
 apps/api/services/comparison_jobs.py
 apps/api/services/db.py
 apps/api/services/huggingface_inference.py
+apps/api/services/kaggle_ingest.py
 apps/api/services/model_registry.py
 apps/api/services/prediction_logs.py
 apps/api/services/queue.py

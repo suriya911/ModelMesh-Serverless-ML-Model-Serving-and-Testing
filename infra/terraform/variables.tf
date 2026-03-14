@@ -33,6 +33,19 @@ variable "hf_api_token" {
   sensitive   = true
 }
 
+variable "kaggle_username" {
+  description = "Kaggle username for backend dataset ingestion."
+  type        = string
+  default     = ""
+}
+
+variable "kaggle_key" {
+  description = "Kaggle API key for backend dataset ingestion."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "hf_provider" {
   description = "Hugging Face inference provider setting."
   type        = string

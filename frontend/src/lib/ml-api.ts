@@ -57,6 +57,7 @@ export interface ComparisonJob {
   status: "queued" | "running" | "completed" | "failed";
   result: ComparisonResult | null;
   dataset_name?: string | null;
+  dataset_s3_key?: string | null;
   error_message?: string | null;
   created_at: string;
   updated_at: string;
@@ -136,6 +137,7 @@ export async function compareModels(
   format: string,
   datasetName?: string | null,
   datasetS3Key?: string | null,
+  kaggleUrl?: string | null,
   onJobUpdate?: (job: ComparisonJob) => void,
 ): Promise<ComparisonResult> {
   const job = await apiRequest<ComparisonJob>("/v1/comparisons", {
@@ -146,6 +148,7 @@ export async function compareModels(
       format,
       dataset_name: datasetName || null,
       dataset_s3_key: datasetS3Key || null,
+      kaggle_url: kaggleUrl || null,
     }),
   });
   onJobUpdate?.(job);

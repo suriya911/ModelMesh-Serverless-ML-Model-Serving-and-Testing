@@ -89,6 +89,8 @@ jobs:
           terraform import -input=false \
             -var="allowed_origins=${{ vars.ALLOWED_ORIGINS }}" \
             -var="hf_api_token=${{ secrets.HF_API_TOKEN }}" \
+            -var="kaggle_username=${{ secrets.KAGGLE_USERNAME }}" \
+            -var="kaggle_key=${{ secrets.KAGGLE_KEY }}" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             aws_ecr_repository.api "${{ vars.ECR_REPOSITORY_NAME }}" || true
 
@@ -120,6 +122,8 @@ jobs:
             -var="deployment_target=${{ vars.DEPLOYMENT_TARGET }}" \
             -var="allowed_origins=${{ vars.ALLOWED_ORIGINS }}" \
             -var="hf_api_token=${{ secrets.HF_API_TOKEN }}" \
+            -var="kaggle_username=${{ secrets.KAGGLE_USERNAME }}" \
+            -var="kaggle_key=${{ secrets.KAGGLE_KEY }}" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
             -var="db_name=${{ vars.DB_NAME }}" \
             -var="db_username=${{ vars.DB_USERNAME }}" \

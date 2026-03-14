@@ -22,6 +22,7 @@ from apps.api.services.huggingface_inference import (
     HuggingFaceInferenceClient,
     HuggingFaceInferenceError,
 )
+from apps.api.services.kaggle_ingest import KaggleIngestError, ingest_kaggle_dataset
 from apps.api.services.model_registry import (
     get_model,
     list_models as list_registered_models,
@@ -191,16 +192,32 @@ def get_logs() -> list[LogEntry]:
 
 @app.post("/v1/comparisons", response_model=ComparisonJob)
 def create_comparison(request: ComparisonJobCreateRequest, background_tasks: BackgroundTasks) -> ComparisonJob:
+    effective_request = request
+    if request.kaggle_url:
+        try:
+            kaggle_dataset = ingest_kaggle_dataset(request.kaggle_url)
+        except KaggleIngestError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        effective_request = request.model_copy(
+            update={
+                "dataset_name": kaggle_dataset.dataset_name,
+                "dataset_s3_key": kaggle_dataset.dataset_s3_key,
+                "data_size": kaggle_dataset.data_size,
+                "features": kaggle_dataset.features,
+                "format": kaggle_dataset.data_format,
+            }
+        )
+
     job_id = f"cmp_{uuid4().hex[:10]}"
-    job = create_job(job_id, request)
+    job = create_job(job_id, effective_request)
     if queue_enabled():
         try:
-            enqueue_comparison_job(job_id, request)
+            enqueue_comparison_job(job_id, effective_request)
         except QueuePublishError as exc:
             fail_job(job_id, str(exc))
             raise HTTPException(status_code=500, detail=str(exc)) from exc
     else:
-        background_tasks.add_task(_process_comparison_job, job_id, request)
+        background_tasks.add_task(_process_comparison_job, job_id, effective_request)
     return job
 
 

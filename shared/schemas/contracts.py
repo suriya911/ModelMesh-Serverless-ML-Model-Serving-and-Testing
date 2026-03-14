@@ -96,6 +96,7 @@ class ComparisonJobCreateRequest(BaseModel):
     format: str
     dataset_name: Optional[str] = None
     dataset_s3_key: Optional[str] = None
+    kaggle_url: Optional[str] = None
 
 
 class ComparisonJob(BaseModel):
