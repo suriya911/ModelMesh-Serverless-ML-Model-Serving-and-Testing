@@ -62,6 +62,12 @@ export interface ComparisonJob {
   updated_at: string;
 }
 
+export interface DatasetUploadResponse {
+  object_key: string;
+  upload_url: string;
+  bucket_name: string;
+}
+
 export interface SystemMetrics {
   requests: number;
   avg_latency: number;
@@ -129,6 +135,7 @@ export async function compareModels(
   features: number,
   format: string,
   datasetName?: string | null,
+  datasetS3Key?: string | null,
   onJobUpdate?: (job: ComparisonJob) => void,
 ): Promise<ComparisonResult> {
   const job = await apiRequest<ComparisonJob>("/v1/comparisons", {
@@ -138,6 +145,7 @@ export async function compareModels(
       features,
       format,
       dataset_name: datasetName || null,
+      dataset_s3_key: datasetS3Key || null,
     }),
   });
   onJobUpdate?.(job);
@@ -158,4 +166,34 @@ export async function compareModels(
   }
 
   throw new Error("Timed out waiting for model comparison results");
+}
+
+export async function createDatasetUpload(file: File): Promise<DatasetUploadResponse> {
+  return apiRequest<DatasetUploadResponse>("/v1/uploads/datasets", {
+    method: "POST",
+    body: JSON.stringify({
+      file_name: file.name,
+      content_type: file.type || "application/octet-stream",
+    }),
+  });
+}
+
+export async function uploadDatasetFile(file: File): Promise<{ objectKey: string; bucketName: string }> {
+  const upload = await createDatasetUpload(file);
+  const response = await fetch(upload.upload_url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+    },
+    body: file,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Dataset upload failed with status ${response.status}`);
+  }
+
+  return {
+    objectKey: upload.object_key,
+    bucketName: upload.bucket_name,
+  };
 }

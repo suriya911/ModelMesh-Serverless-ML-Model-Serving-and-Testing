@@ -95,6 +95,7 @@ class ComparisonJobCreateRequest(BaseModel):
     features: int = Field(ge=1)
     format: str
     dataset_name: Optional[str] = None
+    dataset_s3_key: Optional[str] = None
 
 
 class ComparisonJob(BaseModel):
@@ -102,9 +103,21 @@ class ComparisonJob(BaseModel):
     status: Literal["queued", "running", "completed", "failed"]
     result: ComparisonResult | None = None
     dataset_name: Optional[str] = None
+    dataset_s3_key: Optional[str] = None
     error_message: Optional[str] = None
     created_at: str
     updated_at: str
+
+
+class DatasetUploadRequest(BaseModel):
+    file_name: str = Field(min_length=1)
+    content_type: str = Field(min_length=1)
+
+
+class DatasetUploadResponse(BaseModel):
+    object_key: str
+    upload_url: str
+    bucket_name: str
 
 
 class ModelRecord(BaseModel):

@@ -76,6 +76,7 @@ class ComparisonJobORM(Base):
     job_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     dataset_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dataset_s3_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     data_size: Mapped[int] = mapped_column(Integer, nullable=False)
     features: Mapped[int] = mapped_column(Integer, nullable=False)
     data_format: Mapped[str] = mapped_column(String(32), nullable=False)

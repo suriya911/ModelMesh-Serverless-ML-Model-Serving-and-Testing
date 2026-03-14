@@ -7,7 +7,7 @@ import ResultsPanel from "@/components/dashboard/ResultsPanel";
 import ABVisualization from "@/components/dashboard/ABVisualization";
 import MonitoringPanel from "@/components/dashboard/MonitoringPanel";
 import MetricsPanel from "@/components/dashboard/MetricsPanel";
-import { compareModels, type ComparisonJob, type ComparisonResult, type PredictionResult } from "@/lib/ml-api";
+import { compareModels, uploadDatasetFile, type ComparisonJob, type ComparisonResult, type PredictionResult } from "@/lib/ml-api";
 
 export default function Dashboard() {
   const [results, setResults] = useState<PredictionResult[]>([]);
@@ -23,13 +23,19 @@ export default function Dashboard() {
     setRefreshKey(k => k + 1);
   }, []);
 
-  const handleCompare = useCallback(async (dataSize: number, features: number, format: string, datasetName?: string | null) => {
+  const handleCompare = useCallback(async (dataSize: number, features: number, format: string, datasetName?: string | null, file?: File | null) => {
     setComparing(true);
     setComparisonError(null);
     setComparison(null);
     setComparisonJob(null);
     try {
-      const result = await compareModels(dataSize, features, format, datasetName, setComparisonJob);
+      let datasetS3Key: string | undefined;
+      if (file) {
+        const upload = await uploadDatasetFile(file);
+        datasetS3Key = upload.objectKey;
+      }
+
+      const result = await compareModels(dataSize, features, format, datasetName, datasetS3Key, setComparisonJob);
       setComparison(result);
     } catch (err) {
       setComparisonError(err instanceof Error ? err.message : "Comparison request failed");

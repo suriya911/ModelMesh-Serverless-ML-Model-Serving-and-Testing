@@ -29,10 +29,13 @@ from apps.api.services.model_registry import (
 )
 from apps.api.services.prediction_logs import create_log, list_logs as list_persisted_logs
 from apps.api.services.runtime_state import RuntimeStateStore
+from apps.api.services.storage import DatasetStorageError, create_dataset_upload
 
 from shared.schemas.contracts import (
     ComparisonJob,
     ComparisonJobCreateRequest,
+    DatasetUploadRequest,
+    DatasetUploadResponse,
     LogEntry,
     ModelRecord,
     PredictionRequest,
@@ -118,6 +121,14 @@ def health() -> dict[str, str]:
 @app.get("/v1/models", response_model=list[ModelRecord])
 def list_models() -> list[ModelRecord]:
     return list_registered_models()
+
+
+@app.post("/v1/uploads/datasets", response_model=DatasetUploadResponse)
+def create_dataset_upload_url(request: DatasetUploadRequest) -> DatasetUploadResponse:
+    try:
+        return create_dataset_upload(request.file_name, request.content_type)
+    except DatasetStorageError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.post("/v1/predictions", response_model=PredictionResult)

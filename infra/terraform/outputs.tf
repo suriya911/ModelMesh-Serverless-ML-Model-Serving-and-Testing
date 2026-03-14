@@ -39,3 +39,8 @@ output "alarm_topic_arn" {
   value       = try(aws_sns_topic.alerts[0].arn, null)
   description = "SNS topic ARN for alarm notifications."
 }
+
+output "dataset_bucket_name" {
+  value       = aws_s3_bucket.datasets.bucket
+  description = "S3 bucket used for uploaded comparison datasets."
+}

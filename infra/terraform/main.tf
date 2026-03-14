@@ -51,6 +51,20 @@ resource "aws_ecr_repository" "api" {
   }
 }
 
+resource "aws_s3_bucket" "datasets" {
+  bucket        = "${var.service_name}-datasets-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_public_access_block" "datasets" {
+  bucket = aws_s3_bucket.datasets.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 resource "aws_iam_role" "apprunner_ecr_access" {
   count = var.deployment_target == "apprunner" ? 1 : 0
   name  = "${var.service_name}-apprunner-ecr-access"
@@ -107,6 +121,7 @@ resource "aws_apprunner_service" "api" {
           HF_TIMEOUT_SECONDS = tostring(var.hf_timeout_seconds)
           DATABASE_URL       = var.database_url
           REDIS_URL          = local.effective_redis_url
+          DATASET_BUCKET     = aws_s3_bucket.datasets.bucket
           HF_API_TOKEN       = var.hf_api_token
         }
       }
@@ -158,6 +173,31 @@ resource "aws_iam_role_policy_attachment" "ec2_ssm_core" {
   count      = var.deployment_target == "ec2" ? 1 : 0
   role       = aws_iam_role.ec2_instance_role[0].name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy" "ec2_s3_datasets" {
+  count = var.deployment_target == "ec2" ? 1 : 0
+  name  = "${var.service_name}-datasets-s3"
+  role  = aws_iam_role.ec2_instance_role[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:AbortMultipartUpload",
+          "s3:ListBucket",
+        ]
+        Resource = [
+          aws_s3_bucket.datasets.arn,
+          "${aws_s3_bucket.datasets.arn}/*",
+        ]
+      }
+    ]
+  })
 }
 
 resource "aws_iam_instance_profile" "ec2_profile" {
@@ -315,6 +355,7 @@ resource "aws_instance" "api" {
     HF_TIMEOUT_SECONDS=${var.hf_timeout_seconds}
     DATABASE_URL=${local.effective_database_url}
     REDIS_URL=${local.effective_redis_url}
+    DATASET_BUCKET=${aws_s3_bucket.datasets.bucket}
     ALLOWED_ORIGINS=${var.allowed_origins}
     ENVVARS
 

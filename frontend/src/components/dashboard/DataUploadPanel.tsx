@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { Upload, FileText, Table2, Loader2 } from "lucide-react";
 
 interface Props {
-  onCompare: (dataSize: number, features: number, format: string, datasetName?: string | null) => void;
+  onCompare: (dataSize: number, features: number, format: string, datasetName?: string | null, file?: File | null) => void;
   loading: boolean;
 }
 
@@ -16,6 +16,7 @@ const DATA_FORMATS = [
 export default function DataUploadPanel({ onCompare, loading }: Props) {
   const [format, setFormat] = useState("csv");
   const [fileName, setFileName] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [samples, setSamples] = useState(1000);
   const [features, setFeatures] = useState(8);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -23,6 +24,7 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setSelectedFile(file);
       setFileName(file.name);
       // Detect format from extension
       const ext = file.name.split('.').pop()?.toLowerCase();
@@ -130,7 +132,7 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
 
       {/* Compare button */}
       <button
-        onClick={() => onCompare(samples, features, format, fileName)}
+        onClick={() => onCompare(samples, features, format, fileName, selectedFile)}
         disabled={loading}
         className="w-full py-3 rounded-md font-mono text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
       >
