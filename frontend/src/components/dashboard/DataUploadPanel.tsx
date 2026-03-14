@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { Upload, FileText, Table2, Loader2 } from "lucide-react";
 
 interface Props {
-  onCompare: (dataSize: number, features: number, format: string) => void;
+  onCompare: (dataSize: number, features: number, format: string, datasetName?: string | null) => void;
   loading: boolean;
 }
 
@@ -130,14 +130,14 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
 
       {/* Compare button */}
       <button
-        onClick={() => onCompare(samples, features, format)}
+        onClick={() => onCompare(samples, features, format, fileName)}
         disabled={loading}
         className="w-full py-3 rounded-md font-mono text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
       >
         {loading ? (
           <>
             <Loader2 size={14} className="animate-spin" />
-            Training &amp; Evaluating...
+            Queueing &amp; Evaluating...
           </>
         ) : (
           "Compare Models"

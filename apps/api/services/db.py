@@ -70,6 +70,21 @@ class RuntimeMetricsORM(Base):
     error_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
+class ComparisonJobORM(Base):
+    __tablename__ = "comparison_jobs"
+
+    job_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    dataset_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    data_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    features: Mapped[int] = mapped_column(Integer, nullable=False)
+    data_format: Mapped[str] = mapped_column(String(32), nullable=False)
+    result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
 
@@ -142,3 +157,12 @@ def get_runtime_metrics_row(session: Session) -> RuntimeMetricsORM:
         session.add(row)
         session.flush()
     return row
+
+
+def get_comparison_job(session: Session, job_id: str) -> ComparisonJobORM | None:
+    return session.get(ComparisonJobORM, job_id)
+
+
+def list_comparison_jobs(session: Session, limit: int = 20) -> list[ComparisonJobORM]:
+    stmt = select(ComparisonJobORM).order_by(ComparisonJobORM.created_at.desc()).limit(limit)
+    return list(session.scalars(stmt))

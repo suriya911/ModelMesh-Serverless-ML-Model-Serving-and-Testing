@@ -94,12 +94,15 @@ class ComparisonJobCreateRequest(BaseModel):
     data_size: int = Field(ge=100)
     features: int = Field(ge=1)
     format: str
+    dataset_name: Optional[str] = None
 
 
 class ComparisonJob(BaseModel):
     job_id: str
     status: Literal["queued", "running", "completed", "failed"]
     result: ComparisonResult | None = None
+    dataset_name: Optional[str] = None
+    error_message: Optional[str] = None
     created_at: str
     updated_at: str
 

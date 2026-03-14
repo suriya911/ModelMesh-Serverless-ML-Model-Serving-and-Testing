@@ -52,6 +52,16 @@ export interface ComparisonResult {
   timestamp: string;
 }
 
+export interface ComparisonJob {
+  job_id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  result: ComparisonResult | null;
+  dataset_name?: string | null;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SystemMetrics {
   requests: number;
   avg_latency: number;
@@ -71,14 +81,6 @@ export interface LogEntry {
   status: "success" | "error";
   input_hash: string;
   cached: boolean;
-}
-
-interface ComparisonJob {
-  job_id: string;
-  status: "queued" | "running" | "completed" | "failed";
-  result: ComparisonResult | null;
-  created_at: string;
-  updated_at: string;
 }
 
 const EMPTY_METRICS: SystemMetrics = {
@@ -122,28 +124,37 @@ export async function getLogs(): Promise<LogEntry[]> {
   }
 }
 
-export async function compareModels(dataSize: number, features: number, format: string): Promise<ComparisonResult> {
+export async function compareModels(
+  dataSize: number,
+  features: number,
+  format: string,
+  datasetName?: string | null,
+  onJobUpdate?: (job: ComparisonJob) => void,
+): Promise<ComparisonResult> {
   const job = await apiRequest<ComparisonJob>("/v1/comparisons", {
     method: "POST",
     body: JSON.stringify({
       data_size: dataSize,
       features,
       format,
+      dataset_name: datasetName || null,
     }),
   });
+  onJobUpdate?.(job);
 
   let currentJob = job;
-  for (let attempt = 0; attempt < 10; attempt++) {
+  for (let attempt = 0; attempt < 20; attempt++) {
     if (currentJob.status === "completed" && currentJob.result) {
       return currentJob.result;
     }
 
     if (currentJob.status === "failed") {
-      throw new Error("Model comparison job failed");
+      throw new Error(currentJob.error_message || "Model comparison job failed");
     }
 
     await sleep(1000);
     currentJob = await apiRequest<ComparisonJob>(`/v1/comparisons/${job.job_id}`);
+    onJobUpdate?.(currentJob);
   }
 
   throw new Error("Timed out waiting for model comparison results");

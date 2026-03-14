@@ -2,15 +2,21 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
-from random import Random
 from time import perf_counter
-from typing import Dict
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from apps.api.services.comparison_jobs import (
+    build_comparison_result,
+    complete_job,
+    create_job,
+    fail_job,
+    fetch_job,
+    start_job,
+)
 from apps.api.services.db import run_migrations
 from apps.api.services.huggingface_inference import (
     HuggingFaceInferenceClient,
@@ -27,10 +33,7 @@ from apps.api.services.runtime_state import RuntimeStateStore
 from shared.schemas.contracts import (
     ComparisonJob,
     ComparisonJobCreateRequest,
-    ComparisonResult,
-    DatasetInfo,
     LogEntry,
-    ModelMetrics,
     ModelRecord,
     PredictionRequest,
     PredictionResult,
@@ -61,7 +64,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_comparisons: Dict[str, ComparisonJob] = {}
 _inference_client = HuggingFaceInferenceClient()
 _runtime_state = RuntimeStateStore()
 
@@ -78,72 +80,13 @@ def _hash_input(value: str) -> str:
     return f"{hash_value:x}"
 
 
-def _build_comparison_result(data_size: int, features: int, data_format: str) -> ComparisonResult:
-    seed = data_size * 7 + features * 13
-    rng = Random(seed)
-
-    a_tp = round(data_size * 0.3 * (0.85 + rng.random() * 0.1))
-    a_fp = round(data_size * 0.3 * (0.05 + rng.random() * 0.08))
-    a_fn = round(data_size * 0.3 * (0.08 + rng.random() * 0.07))
-    a_tn = round(data_size * 0.3) - a_fp
-
-    b_tp = round(data_size * 0.3 * (0.88 + rng.random() * 0.08))
-    b_fp = round(data_size * 0.3 * (0.07 + rng.random() * 0.1))
-    b_fn = round(data_size * 0.3 * (0.04 + rng.random() * 0.06))
-    b_tn = round(data_size * 0.3) - b_fp
-
-    def build_metrics(tp: int, fp: int, fn: int, tn: int, faster: bool) -> ModelMetrics:
-        precision = tp / (tp + fp) if tp + fp else 0
-        recall = tp / (tp + fn) if tp + fn else 0
-        accuracy = (tp + tn) / (tp + fp + fn + tn) if tp + fp + fn + tn else 0
-        specificity = tn / (tn + fp) if tn + fp else 0
-        f1_score = 2 * (precision * recall) / (precision + recall) if precision + recall else 0
-
-        if faster:
-            latency_avg = round(85 + rng.random() * 40)
-            throughput = round(120 + rng.random() * 80)
-        else:
-            latency_avg = round(110 + rng.random() * 60)
-            throughput = round(80 + rng.random() * 60)
-
-        return ModelMetrics(
-            accuracy=round(accuracy, 4),
-            precision=round(precision, 4),
-            recall=round(recall, 4),
-            f1_score=round(f1_score, 4),
-            auc_roc=round(0.88 + rng.random() * 0.08, 4) if faster else round(0.91 + rng.random() * 0.06, 4),
-            auc_pr=round(0.84 + rng.random() * 0.1, 4) if faster else round(0.87 + rng.random() * 0.08, 4),
-            log_loss=round(0.28 + rng.random() * 0.15, 4) if faster else round(0.22 + rng.random() * 0.12, 4),
-            mse=round(0.08 + rng.random() * 0.06, 4) if faster else round(0.06 + rng.random() * 0.05, 4),
-            mae=round(0.05 + rng.random() * 0.04, 4) if faster else round(0.04 + rng.random() * 0.03, 4),
-            r_squared=round(0.82 + rng.random() * 0.1, 4) if faster else round(0.85 + rng.random() * 0.08, 4),
-            specificity=round(specificity, 4),
-            sensitivity=round(recall, 4),
-            confusion_matrix={"tp": tp, "fp": fp, "tn": tn, "fn": fn},
-            latency_avg_ms=latency_avg,
-            latency_p50_ms=max(1, latency_avg - 15),
-            latency_p95_ms=latency_avg + (65 if faster else 90),
-            latency_p99_ms=latency_avg + (135 if faster else 190),
-            throughput_rps=throughput,
-            total_predictions=data_size,
-            error_rate=round(0.5 + rng.random() * 1.5, 2) if faster else round(0.8 + rng.random() * 2.0, 2),
-        )
-
-    classes = ["positive", "negative"] if features <= 5 else ["positive", "negative", "neutral"]
-
-    return ComparisonResult(
-        model_a=build_metrics(a_tp, a_fp, a_fn, a_tn, True),
-        model_b=build_metrics(b_tp, b_fp, b_fn, b_tn, False),
-        dataset_info=DatasetInfo(
-            total_samples=data_size,
-            features=features,
-            classes=classes,
-            format=data_format,
-            train_split=0.8,
-            test_split=0.2,
-        ),
-        timestamp=_timestamp(),
-    )
+def _process_comparison_job(job_id: str, request: ComparisonJobCreateRequest) -> None:
+    try:
+        start_job(job_id)
+        result = build_comparison_result(request.data_size, request.features, request.format)
+        complete_job(job_id, result)
+    except Exception as exc:  # noqa: BLE001
+        fail_job(job_id, str(exc))
 
 
 def _append_log(result: PredictionResult, input_hash: str) -> None:
@@ -235,22 +178,16 @@ def get_logs() -> list[LogEntry]:
 
 
 @app.post("/v1/comparisons", response_model=ComparisonJob)
-def create_comparison(request: ComparisonJobCreateRequest) -> ComparisonJob:
+def create_comparison(request: ComparisonJobCreateRequest, background_tasks: BackgroundTasks) -> ComparisonJob:
     job_id = f"cmp_{uuid4().hex[:10]}"
-    result = _build_comparison_result(request.data_size, request.features, request.format)
-    job = ComparisonJob(
-        job_id=job_id,
-        status="completed",
-        result=result,
-        created_at=_timestamp(),
-        updated_at=_timestamp(),
-    )
-    _comparisons[job_id] = job
+    job = create_job(job_id, request)
+    background_tasks.add_task(_process_comparison_job, job_id, request)
     return job
 
 
 @app.get("/v1/comparisons/{job_id}", response_model=ComparisonJob)
 def get_comparison(job_id: str) -> ComparisonJob:
-    if job_id not in _comparisons:
+    job = fetch_job(job_id)
+    if job is None:
         raise HTTPException(status_code=404, detail="Comparison job not found")
-    return _comparisons[job_id]
+    return job

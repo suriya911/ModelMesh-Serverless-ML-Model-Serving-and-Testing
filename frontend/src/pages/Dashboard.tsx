@@ -7,7 +7,7 @@ import ResultsPanel from "@/components/dashboard/ResultsPanel";
 import ABVisualization from "@/components/dashboard/ABVisualization";
 import MonitoringPanel from "@/components/dashboard/MonitoringPanel";
 import MetricsPanel from "@/components/dashboard/MetricsPanel";
-import { compareModels, type ComparisonResult, type PredictionResult } from "@/lib/ml-api";
+import { compareModels, type ComparisonJob, type ComparisonResult, type PredictionResult } from "@/lib/ml-api";
 
 export default function Dashboard() {
   const [results, setResults] = useState<PredictionResult[]>([]);
@@ -16,17 +16,20 @@ export default function Dashboard() {
   const [comparing, setComparing] = useState(false);
   const [activeTab, setActiveTab] = useState<'compare' | 'inference'>('compare');
   const [comparisonError, setComparisonError] = useState<string | null>(null);
+  const [comparisonJob, setComparisonJob] = useState<ComparisonJob | null>(null);
 
   const handleResult = useCallback((result: PredictionResult) => {
     setResults(prev => [result, ...prev].slice(0, 20));
     setRefreshKey(k => k + 1);
   }, []);
 
-  const handleCompare = useCallback(async (dataSize: number, features: number, format: string) => {
+  const handleCompare = useCallback(async (dataSize: number, features: number, format: string, datasetName?: string | null) => {
     setComparing(true);
     setComparisonError(null);
+    setComparison(null);
+    setComparisonJob(null);
     try {
-      const result = await compareModels(dataSize, features, format);
+      const result = await compareModels(dataSize, features, format, datasetName, setComparisonJob);
       setComparison(result);
     } catch (err) {
       setComparisonError(err instanceof Error ? err.message : "Comparison request failed");
@@ -70,6 +73,29 @@ export default function Dashboard() {
             </div>
 
             <div className="border-t border-border pt-5">
+              {comparisonJob && !comparison && !comparisonError ? (
+                <div className="bg-card border border-primary/30 rounded-md p-6 sm:p-8 min-h-[220px] flex items-center justify-center">
+                  <div className="text-center space-y-3">
+                    <div className="font-mono text-[10px] text-primary uppercase tracking-wider">
+                      Comparison Job {comparisonJob.status}
+                    </div>
+                    <div className="font-mono text-xs text-foreground">
+                      Job ID: {comparisonJob.job_id}
+                    </div>
+                    {comparisonJob.dataset_name ? (
+                      <div className="font-mono text-xs text-muted-foreground">
+                        Dataset: {comparisonJob.dataset_name}
+                      </div>
+                    ) : null}
+                    <div className="font-mono text-xs text-muted-foreground">
+                      {comparisonJob.status === "queued"
+                        ? "Waiting for backend worker slot."
+                        : "Running evaluation and aggregating metrics."}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               {comparison ? (
                 <ModelComparisonPanel comparison={comparison} />
               ) : comparisonError ? (
