@@ -18,6 +18,11 @@ output "ec2_public_ip" {
   description = "EC2 public IP when deployment_target is ec2."
 }
 
+output "ec2_instance_id" {
+  value       = try(aws_instance.api[0].id, null)
+  description = "EC2 instance ID when deployment_target is ec2."
+}
+
 output "cloudfront_domain_name" {
   value       = try(aws_cloudfront_distribution.api[0].domain_name, null)
   description = "CloudFront HTTPS domain in front of EC2 backend."
@@ -48,4 +53,10 @@ output "dataset_bucket_name" {
 output "comparison_queue_url" {
   value       = aws_sqs_queue.comparison_jobs.id
   description = "SQS queue URL for async comparison jobs."
+}
+
+output "database_url" {
+  value       = local.effective_database_url
+  description = "Effective database URL used by the backend."
+  sensitive   = true
 }
