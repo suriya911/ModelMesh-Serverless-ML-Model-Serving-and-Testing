@@ -5,18 +5,21 @@ import os
 import signal
 import sys
 import time
+from pathlib import Path
 from typing import Any
 
 import boto3
 
 from apps.api.services.comparison_jobs import (
     build_comparison_result,
+    build_comparison_result_from_dataset,
     complete_job,
     fail_job,
     start_job,
 )
 from apps.api.services.db import run_migrations
-from apps.api.services.storage import DatasetStorageError, ensure_dataset_object_exists
+from apps.api.services.dataset_evaluation import DatasetEvaluationError
+from apps.api.services.storage import DatasetStorageError, download_dataset_to_tempfile, ensure_dataset_object_exists
 
 
 RUNNING = True
@@ -46,13 +49,21 @@ def process_message(message: dict[str, Any]) -> None:
         dataset_s3_key = body.get("dataset_s3_key")
         if dataset_s3_key:
             ensure_dataset_object_exists(dataset_s3_key)
-        result = build_comparison_result(
-            data_size=int(body["data_size"]),
-            features=int(body["features"]),
-            data_format=str(body["format"]),
-        )
+            temp_path = download_dataset_to_tempfile(dataset_s3_key)
+            try:
+                result = build_comparison_result_from_dataset(temp_path)
+            finally:
+                Path(temp_path).unlink(missing_ok=True)
+        else:
+            result = build_comparison_result(
+                data_size=int(body["data_size"]),
+                features=int(body["features"]),
+                data_format=str(body["format"]),
+            )
         complete_job(job_id, result)
     except DatasetStorageError as exc:
+        fail_job(job_id, str(exc))
+    except DatasetEvaluationError as exc:
         fail_job(job_id, str(exc))
     except Exception as exc:  # noqa: BLE001
         fail_job(job_id, str(exc))

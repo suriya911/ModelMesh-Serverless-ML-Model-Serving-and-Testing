@@ -6,6 +6,7 @@ apps/api/__init__.py
 apps/api/main.py
 apps/api/services/__init__.py
 apps/api/services/comparison_jobs.py
+apps/api/services/dataset_evaluation.py
 apps/api/services/db.py
 apps/api/services/huggingface_inference.py
 apps/api/services/kaggle_ingest.py

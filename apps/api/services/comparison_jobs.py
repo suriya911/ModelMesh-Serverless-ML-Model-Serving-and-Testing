@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from random import Random
 
 from apps.api.services.db import ComparisonJobORM, get_comparison_job, list_comparison_jobs, session_scope
+from apps.api.services.dataset_evaluation import DatasetEvaluationError, evaluate_dataset_file
 from shared.schemas.contracts import ComparisonJob, ComparisonJobCreateRequest, ComparisonResult, DatasetInfo, ModelMetrics
 
 
@@ -152,3 +154,12 @@ def build_comparison_result(data_size: int, features: int, data_format: str) -> 
         ),
         timestamp=_timestamp(),
     )
+
+
+def build_comparison_result_from_dataset(dataset_path: Path) -> ComparisonResult:
+    try:
+        return evaluate_dataset_file(dataset_path)
+    except DatasetEvaluationError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise DatasetEvaluationError(str(exc)) from exc

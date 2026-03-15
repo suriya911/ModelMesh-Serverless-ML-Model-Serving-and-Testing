@@ -14,4 +14,6 @@ Requires-Dist: redis<6.0.0,>=5.2.0
 Requires-Dist: alembic<2.0.0,>=1.14.0
 Requires-Dist: boto3<2.0.0,>=1.38.0
 Requires-Dist: kaggle<2.0.0,>=1.7.4
+Requires-Dist: numpy<3.0.0,>=2.2.0
+Requires-Dist: scikit-learn<2.0.0,>=1.7.0
 Dynamic: license-file
