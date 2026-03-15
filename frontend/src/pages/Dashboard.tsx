@@ -7,7 +7,7 @@ import ResultsPanel from "@/components/dashboard/ResultsPanel";
 import ABVisualization from "@/components/dashboard/ABVisualization";
 import MonitoringPanel from "@/components/dashboard/MonitoringPanel";
 import MetricsPanel from "@/components/dashboard/MetricsPanel";
-import { compareModels, uploadDatasetFile, type ComparisonJob, type ComparisonResult, type PredictionResult } from "@/lib/ml-api";
+import { compareModels, uploadDatasetFile, type ComparisonJob, type ComparisonOptions, type ComparisonResult, type PredictionResult } from "@/lib/ml-api";
 
 export default function Dashboard() {
   const [results, setResults] = useState<PredictionResult[]>([]);
@@ -24,12 +24,8 @@ export default function Dashboard() {
   }, []);
 
   const handleCompare = useCallback(async (
-    dataSize: number,
-    features: number,
-    format: string,
-    datasetName?: string | null,
+    options: ComparisonOptions,
     file?: File | null,
-    kaggleUrl?: string | null,
   ) => {
     setComparing(true);
     setComparisonError(null);
@@ -37,12 +33,18 @@ export default function Dashboard() {
     setComparisonJob(null);
     try {
       let datasetS3Key: string | undefined;
-      if (file && !kaggleUrl) {
+      if (file && !options.kaggleUrl) {
         const upload = await uploadDatasetFile(file);
         datasetS3Key = upload.objectKey;
       }
 
-      const result = await compareModels(dataSize, features, format, datasetName, datasetS3Key, kaggleUrl, setComparisonJob);
+      const result = await compareModels(
+        {
+          ...options,
+          datasetS3Key,
+        },
+        setComparisonJob,
+      );
       setComparison(result);
     } catch (err) {
       setComparisonError(err instanceof Error ? err.message : "Comparison request failed");
@@ -103,6 +105,9 @@ export default function Dashboard() {
                         ? "Waiting for backend worker slot."
                         : "Running evaluation and aggregating metrics."}
                     </div>
+                    <div className="font-mono text-[11px] text-muted-foreground">
+                      The selected train/test split and model types are applied server-side.
+                    </div>
                   </div>
                 </div>
               ) : null}
@@ -121,8 +126,8 @@ export default function Dashboard() {
                   <div className="text-center space-y-3">
                     <div className="font-mono text-3xl text-muted-foreground/30">A ⟷ B</div>
                     <p className="font-mono text-xs leading-relaxed text-muted-foreground sm:text-sm">
-                      Configure your dataset and click "Compare Models" to see side-by-side metrics
-                      for Model A (Logistic Regression) and Model B (Random Forest).
+                      Configure your dataset, choose any two supported models, and click
+                      "Compare Models" to see side-by-side evaluation metrics.
                     </p>
                   </div>
                 </div>

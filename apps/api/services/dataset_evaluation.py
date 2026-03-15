@@ -7,11 +7,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from statistics import mean
 from time import perf_counter
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
+from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.feature_extraction import DictVectorizer
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
@@ -27,8 +29,11 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.model_selection import train_test_split
+from sklearn.neural_network import MLPClassifier, MLPRegressor
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder
+from sklearn.svm import SVC, SVR
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 from shared.schemas.contracts import ComparisonResult, DatasetInfo, ModelMetrics
 
@@ -57,6 +62,60 @@ class LoadedDataset:
     rows: list[dict[str, Any]]
     data_format: str
     target_column: str
+
+
+@dataclass(frozen=True)
+class ModelSpec:
+    key: str
+    label: str
+    classifier_factory: Callable[[], Any]
+    regressor_factory: Callable[[], Any]
+
+
+MODEL_SPECS: dict[str, ModelSpec] = {
+    "logistic_regression": ModelSpec(
+        key="logistic_regression",
+        label="Logistic Regression",
+        classifier_factory=lambda: LogisticRegression(max_iter=1000),
+        regressor_factory=lambda: LinearRegression(),
+    ),
+    "decision_tree": ModelSpec(
+        key="decision_tree",
+        label="Decision Tree",
+        classifier_factory=lambda: DecisionTreeClassifier(random_state=42),
+        regressor_factory=lambda: DecisionTreeRegressor(random_state=42),
+    ),
+    "random_forest": ModelSpec(
+        key="random_forest",
+        label="Random Forest",
+        classifier_factory=lambda: RandomForestClassifier(n_estimators=200, random_state=42),
+        regressor_factory=lambda: RandomForestRegressor(n_estimators=200, random_state=42),
+    ),
+    "gradient_boosting": ModelSpec(
+        key="gradient_boosting",
+        label="Gradient Boosting",
+        classifier_factory=lambda: GradientBoostingClassifier(random_state=42),
+        regressor_factory=lambda: GradientBoostingRegressor(random_state=42),
+    ),
+    "svm": ModelSpec(
+        key="svm",
+        label="Support Vector Machine",
+        classifier_factory=lambda: SVC(probability=True, random_state=42),
+        regressor_factory=lambda: SVR(),
+    ),
+    "knn": ModelSpec(
+        key="knn",
+        label="K-Nearest Neighbors",
+        classifier_factory=lambda: KNeighborsClassifier(n_neighbors=5),
+        regressor_factory=lambda: KNeighborsRegressor(n_neighbors=5),
+    ),
+    "mlp_neural_net": ModelSpec(
+        key="mlp_neural_net",
+        label="MLP Neural Net",
+        classifier_factory=lambda: MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=500, random_state=42),
+        regressor_factory=lambda: MLPRegressor(hidden_layer_sizes=(64, 32), max_iter=500, random_state=42),
+    ),
+}
 
 
 def _timestamp() -> str:
@@ -151,6 +210,25 @@ def _build_vectorizer() -> DictVectorizer:
     return DictVectorizer(sparse=True)
 
 
+def get_model_label(model_key: str) -> str:
+    return MODEL_SPECS.get(model_key, MODEL_SPECS["logistic_regression"]).label
+
+
+def _get_model_spec(model_key: str) -> ModelSpec:
+    return MODEL_SPECS.get(model_key, MODEL_SPECS["logistic_regression"])
+
+
+def _build_pipeline(model_key: str, is_regression: bool) -> Pipeline:
+    spec = _get_model_spec(model_key)
+    estimator = spec.regressor_factory() if is_regression else spec.classifier_factory()
+    return Pipeline(
+        steps=[
+            ("vectorizer", _build_vectorizer()),
+            ("model", estimator),
+        ]
+    )
+
+
 def _specificity_from_confusion_matrix(matrix: np.ndarray) -> float:
     specificities: list[float] = []
     total = matrix.sum()
@@ -183,6 +261,7 @@ def _classification_metrics(
     y_train: np.ndarray,
     y_test: np.ndarray,
     class_names: list[str],
+    display_name: str,
 ) -> ModelMetrics:
     fit_started = perf_counter()
     pipeline.fit(x_train, y_train)
@@ -217,6 +296,7 @@ def _classification_metrics(
             loss = 0.0
 
     return ModelMetrics(
+        display_name=display_name,
         accuracy=round(float(accuracy_score(y_test, predictions)), 4),
         precision=round(float(precision_score(y_test, predictions, average="weighted", zero_division=0)), 4),
         recall=round(float(recall_score(y_test, predictions, average="weighted", zero_division=0)), 4),
@@ -246,6 +326,7 @@ def _regression_metrics(
     x_test: list[dict[str, Any]],
     y_train: np.ndarray,
     y_test: np.ndarray,
+    display_name: str,
 ) -> ModelMetrics:
     fit_started = perf_counter()
     pipeline.fit(x_train, y_train)
@@ -260,6 +341,7 @@ def _regression_metrics(
     mse = float(mean_squared_error(y_test, predictions))
     mae = float(mean_absolute_error(y_test, predictions))
     return ModelMetrics(
+        display_name=display_name,
         accuracy=0.0,
         precision=0.0,
         recall=0.0,
@@ -283,33 +365,33 @@ def _regression_metrics(
     )
 
 
-def evaluate_dataset_file(dataset_path: Path) -> ComparisonResult:
+def evaluate_dataset_file(
+    dataset_path: Path,
+    *,
+    model_a_type: str = "logistic_regression",
+    model_b_type: str = "random_forest",
+    train_split: float = 0.8,
+    metadata_mode: str = "auto",
+    manual_data_size: int | None = None,
+    manual_features: int | None = None,
+    manual_classes: list[str] | None = None,
+) -> ComparisonResult:
     loaded = load_dataset(dataset_path)
     features, raw_targets = _prepare_features(loaded.rows, loaded.target_column)
-    vectorizer = _build_vectorizer()
     feature_count = len(features[0])
+    test_size = max(0.05, min(0.49, 1 - train_split))
 
     is_regression = _is_regression_target(raw_targets)
     if is_regression:
         y = np.array([float(value) for value in raw_targets], dtype=float)
-        x_train, x_test, y_train, y_test = train_test_split(features, y, test_size=0.2, random_state=42)
+        x_train, x_test, y_train, y_test = train_test_split(features, y, test_size=test_size, random_state=42)
 
-        model_a = Pipeline(
-            steps=[
-                ("vectorizer", vectorizer),
-                ("model", LinearRegression()),
-            ]
-        )
-        model_b = Pipeline(
-            steps=[
-                ("vectorizer", _build_vectorizer()),
-                ("model", RandomForestRegressor(n_estimators=200, random_state=42)),
-            ]
-        )
+        model_a = _build_pipeline(model_a_type, True)
+        model_b = _build_pipeline(model_b_type, True)
 
-        metrics_a = _regression_metrics(model_a, x_train, x_test, y_train, y_test)
-        metrics_b = _regression_metrics(model_b, x_train, x_test, y_train, y_test)
-        classes = [loaded.target_column]
+        metrics_a = _regression_metrics(model_a, x_train, x_test, y_train, y_test, get_model_label(model_a_type))
+        metrics_b = _regression_metrics(model_b, x_train, x_test, y_train, y_test, get_model_label(model_b_type))
+        inferred_classes = [loaded.target_column]
     else:
         encoder = LabelEncoder()
         y = encoder.fit_transform([str(value) for value in raw_targets])
@@ -317,43 +399,52 @@ def evaluate_dataset_file(dataset_path: Path) -> ComparisonResult:
         x_train, x_test, y_train, y_test = train_test_split(
             features,
             y,
-            test_size=0.2,
+            test_size=test_size,
             random_state=42,
             stratify=stratify,
         )
 
-        model_a = Pipeline(
-            steps=[
-                ("vectorizer", vectorizer),
-                ("model", LogisticRegression(max_iter=1000)),
-            ]
-        )
-        model_b = Pipeline(
-            steps=[
-                ("vectorizer", _build_vectorizer()),
-                ("model", RandomForestClassifier(n_estimators=200, random_state=42)),
-            ]
-        )
+        model_a = _build_pipeline(model_a_type, False)
+        model_b = _build_pipeline(model_b_type, False)
 
         class_names = [str(value) for value in encoder.classes_]
-        metrics_a = _classification_metrics(model_a, x_train, x_test, y_train, y_test, class_names)
-        metrics_b = _classification_metrics(model_b, x_train, x_test, y_train, y_test, class_names)
-        classes = class_names
+        metrics_a = _classification_metrics(
+            model_a,
+            x_train,
+            x_test,
+            y_train,
+            y_test,
+            class_names,
+            get_model_label(model_a_type),
+        )
+        metrics_b = _classification_metrics(
+            model_b,
+            x_train,
+            x_test,
+            y_train,
+            y_test,
+            class_names,
+            get_model_label(model_b_type),
+        )
+        inferred_classes = class_names
 
     total_samples = len(features)
-    test_size = max(1, len(x_test))
+    inferred_test_size = max(1, len(x_test))
     train_size = max(1, len(x_train))
+    resolved_classes = manual_classes if metadata_mode == "manual" and manual_classes else inferred_classes
+    resolved_samples = manual_data_size if metadata_mode == "manual" and manual_data_size else total_samples
+    resolved_features = manual_features if metadata_mode == "manual" and manual_features else feature_count
 
     return ComparisonResult(
         model_a=metrics_a,
         model_b=metrics_b,
         dataset_info=DatasetInfo(
-            total_samples=total_samples,
-            features=feature_count,
-            classes=classes,
+            total_samples=resolved_samples,
+            features=resolved_features,
+            classes=resolved_classes,
             format=loaded.data_format,
             train_split=round(train_size / total_samples, 2),
-            test_split=round(test_size / total_samples, 2),
+            test_split=round(inferred_test_size / total_samples, 2),
         ),
         timestamp=_timestamp(),
     )

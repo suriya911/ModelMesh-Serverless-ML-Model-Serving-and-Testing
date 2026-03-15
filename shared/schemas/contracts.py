@@ -52,6 +52,7 @@ class ConfusionMatrix(BaseModel):
 
 
 class ModelMetrics(BaseModel):
+    display_name: str = ""
     accuracy: float
     precision: float
     recall: float
@@ -97,6 +98,11 @@ class ComparisonJobCreateRequest(BaseModel):
     dataset_name: Optional[str] = None
     dataset_s3_key: Optional[str] = None
     kaggle_url: Optional[str] = None
+    model_a_type: str = "logistic_regression"
+    model_b_type: str = "random_forest"
+    train_split: float = Field(default=0.8, gt=0.5, lt=0.95)
+    metadata_mode: Literal["auto", "manual"] = "auto"
+    manual_classes: Optional[list[str]] = None
 
 
 class ComparisonJob(BaseModel):

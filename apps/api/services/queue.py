@@ -30,6 +30,11 @@ def enqueue_comparison_job(job_id: str, request: ComparisonJobCreateRequest) -> 
         "format": request.format,
         "dataset_name": request.dataset_name,
         "dataset_s3_key": request.dataset_s3_key,
+        "model_a_type": request.model_a_type,
+        "model_b_type": request.model_b_type,
+        "train_split": request.train_split,
+        "metadata_mode": request.metadata_mode,
+        "manual_classes": request.manual_classes,
     }
 
     response = client.send_message(

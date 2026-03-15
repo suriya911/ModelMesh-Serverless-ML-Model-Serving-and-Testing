@@ -16,6 +16,7 @@ export interface PredictionResult {
 }
 
 export interface ModelMetrics {
+  display_name: string;
   accuracy: number;
   precision: number;
   recall: number;
@@ -61,6 +62,20 @@ export interface ComparisonJob {
   error_message?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ComparisonOptions {
+  dataSize: number;
+  features: number;
+  format: string;
+  datasetName?: string | null;
+  datasetS3Key?: string | null;
+  kaggleUrl?: string | null;
+  modelAType: string;
+  modelBType: string;
+  trainSplit: number;
+  metadataMode: "auto" | "manual";
+  manualClasses: string[];
 }
 
 export interface DatasetUploadResponse {
@@ -132,23 +147,23 @@ export async function getLogs(): Promise<LogEntry[]> {
 }
 
 export async function compareModels(
-  dataSize: number,
-  features: number,
-  format: string,
-  datasetName?: string | null,
-  datasetS3Key?: string | null,
-  kaggleUrl?: string | null,
+  options: ComparisonOptions,
   onJobUpdate?: (job: ComparisonJob) => void,
 ): Promise<ComparisonResult> {
   const job = await apiRequest<ComparisonJob>("/v1/comparisons", {
     method: "POST",
     body: JSON.stringify({
-      data_size: dataSize,
-      features,
-      format,
-      dataset_name: datasetName || null,
-      dataset_s3_key: datasetS3Key || null,
-      kaggle_url: kaggleUrl || null,
+      data_size: options.dataSize,
+      features: options.features,
+      format: options.format,
+      dataset_name: options.datasetName || null,
+      dataset_s3_key: options.datasetS3Key || null,
+      kaggle_url: options.kaggleUrl || null,
+      model_a_type: options.modelAType,
+      model_b_type: options.modelBType,
+      train_split: options.trainSplit,
+      metadata_mode: options.metadataMode,
+      manual_classes: options.manualClasses,
     }),
   });
   onJobUpdate?.(job);

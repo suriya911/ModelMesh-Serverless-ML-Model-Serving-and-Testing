@@ -1,15 +1,9 @@
 import { useState, useRef } from "react";
 import { Upload, FileText, Table2, Loader2 } from "lucide-react";
+import type { ComparisonOptions } from "@/lib/ml-api";
 
 interface Props {
-  onCompare: (
-    dataSize: number,
-    features: number,
-    format: string,
-    datasetName?: string | null,
-    file?: File | null,
-    kaggleUrl?: string | null,
-  ) => void;
+  onCompare: (options: ComparisonOptions, file?: File | null) => void;
   loading: boolean;
 }
 
@@ -20,13 +14,28 @@ const DATA_FORMATS = [
   { value: "tsv", label: "TSV", desc: "Tab-separated values" },
 ];
 
+const MODEL_OPTIONS = [
+  { value: "logistic_regression", label: "Linear / Logistic Regression" },
+  { value: "decision_tree", label: "Decision Tree" },
+  { value: "random_forest", label: "Random Forest" },
+  { value: "gradient_boosting", label: "Gradient Boosting" },
+  { value: "svm", label: "Support Vector Machine" },
+  { value: "knn", label: "K-Nearest Neighbors" },
+  { value: "mlp_neural_net", label: "MLP Neural Net" },
+];
+
 export default function DataUploadPanel({ onCompare, loading }: Props) {
   const [format, setFormat] = useState("csv");
   const [fileName, setFileName] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [kaggleUrl, setKaggleUrl] = useState("");
+  const [metadataMode, setMetadataMode] = useState<"auto" | "manual">("auto");
   const [samples, setSamples] = useState(1000);
   const [features, setFeatures] = useState(8);
+  const [classes, setClasses] = useState("0,1");
+  const [trainSplit, setTrainSplit] = useState(0.8);
+  const [modelAType, setModelAType] = useState("logistic_regression");
+  const [modelBType, setModelBType] = useState("random_forest");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -41,6 +50,11 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
       }
     }
   };
+
+  const parsedClasses = classes
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
 
   return (
     <div className="space-y-5">
@@ -102,6 +116,66 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider block mb-1.5">
+            Model A
+          </label>
+          <select
+            value={modelAType}
+            onChange={(e) => setModelAType(e.target.value)}
+            className="w-full bg-background border border-border rounded-md px-3 py-2 font-mono text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            {MODEL_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider block mb-1.5">
+            Model B
+          </label>
+          <select
+            value={modelBType}
+            onChange={(e) => setModelBType(e.target.value)}
+            className="w-full bg-background border border-border rounded-md px-3 py-2 font-mono text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            {MODEL_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="rounded-md border border-border bg-background/60 p-3 space-y-3">
+        <div className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+          Dataset Metadata Mode
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {(["auto", "manual"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setMetadataMode(mode)}
+              className={`rounded-md border px-3 py-2 font-mono text-[11px] transition-colors ${
+                metadataMode === mode
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {mode === "auto" ? "Auto Detect" : "Use Manual Values"}
+            </button>
+          ))}
+        </div>
+        <p className="font-mono text-[10px] text-muted-foreground">
+          Auto uses the uploaded file or Kaggle dataset. Manual keeps your entered samples, features, and classes in the comparison output.
+        </p>
+      </div>
+
       {/* Dataset params */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
@@ -112,6 +186,7 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
             type="number"
             value={samples}
             onChange={(e) => setSamples(Math.max(100, parseInt(e.target.value) || 100))}
+            disabled={metadataMode === "auto" && !!(selectedFile || kaggleUrl.trim())}
             className="w-full bg-background border border-border rounded-md px-3 py-2 font-mono text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
@@ -123,9 +198,24 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
             type="number"
             value={features}
             onChange={(e) => setFeatures(Math.max(1, parseInt(e.target.value) || 1))}
+            disabled={metadataMode === "auto" && !!(selectedFile || kaggleUrl.trim())}
             className="w-full bg-background border border-border rounded-md px-3 py-2 font-mono text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
+      </div>
+
+      <div>
+        <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider block mb-1.5">
+          Classes
+        </label>
+        <input
+          type="text"
+          value={classes}
+          onChange={(e) => setClasses(e.target.value)}
+          disabled={metadataMode === "auto" && !!(selectedFile || kaggleUrl.trim())}
+          placeholder="0,1 or cat,dog,bird"
+          className="w-full bg-background border border-border rounded-md px-3 py-2 font-mono text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+        />
       </div>
 
       <div>
@@ -161,16 +251,41 @@ export default function DataUploadPanel({ onCompare, loading }: Props) {
       {/* Train/test split info */}
       <div className="flex items-center gap-3">
         <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-          <div className="h-full bg-primary rounded-full" style={{ width: '80%' }} />
+          <div className="h-full bg-primary rounded-full" style={{ width: `${trainSplit * 100}%` }} />
         </div>
         <span className="font-mono text-[10px] text-muted-foreground whitespace-nowrap">
-          80/20 split
+          {Math.round(trainSplit * 100)}/{Math.round((1 - trainSplit) * 100)} split
         </span>
       </div>
+      <input
+        type="range"
+        min={0.6}
+        max={0.9}
+        step={0.05}
+        value={trainSplit}
+        onChange={(e) => setTrainSplit(parseFloat(e.target.value))}
+        className="w-full accent-[hsl(187,80%,53%)]"
+      />
 
       {/* Compare button */}
       <button
-        onClick={() => onCompare(samples, features, format, fileName, selectedFile, kaggleUrl.trim() || null)}
+        onClick={() =>
+          onCompare(
+            {
+              dataSize: samples,
+              features,
+              format,
+              datasetName: fileName,
+              kaggleUrl: kaggleUrl.trim() || null,
+              modelAType,
+              modelBType,
+              trainSplit,
+              metadataMode,
+              manualClasses: parsedClasses,
+            },
+            selectedFile,
+          )
+        }
         disabled={loading}
         className="w-full py-3 rounded-md font-mono text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
       >

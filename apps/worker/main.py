@@ -20,6 +20,7 @@ from apps.api.services.comparison_jobs import (
 from apps.api.services.db import run_migrations
 from apps.api.services.dataset_evaluation import DatasetEvaluationError
 from apps.api.services.storage import DatasetStorageError, download_dataset_to_tempfile, ensure_dataset_object_exists
+from shared.schemas.contracts import ComparisonJobCreateRequest
 
 
 RUNNING = True
@@ -44,21 +45,37 @@ def _region_name() -> str | None:
 def process_message(message: dict[str, Any]) -> None:
     body = json.loads(message["Body"])
     job_id = body["job_id"]
+    request = ComparisonJobCreateRequest(
+        data_size=int(body["data_size"]),
+        features=int(body["features"]),
+        format=str(body["format"]),
+        dataset_name=body.get("dataset_name"),
+        dataset_s3_key=body.get("dataset_s3_key"),
+        model_a_type=str(body.get("model_a_type") or "logistic_regression"),
+        model_b_type=str(body.get("model_b_type") or "random_forest"),
+        train_split=float(body.get("train_split") or 0.8),
+        metadata_mode=str(body.get("metadata_mode") or "auto"),
+        manual_classes=body.get("manual_classes"),
+    )
     try:
         start_job(job_id)
-        dataset_s3_key = body.get("dataset_s3_key")
+        dataset_s3_key = request.dataset_s3_key
         if dataset_s3_key:
             ensure_dataset_object_exists(dataset_s3_key)
             temp_path = download_dataset_to_tempfile(dataset_s3_key)
             try:
-                result = build_comparison_result_from_dataset(temp_path)
+                result = build_comparison_result_from_dataset(temp_path, request)
             finally:
                 Path(temp_path).unlink(missing_ok=True)
         else:
             result = build_comparison_result(
-                data_size=int(body["data_size"]),
-                features=int(body["features"]),
-                data_format=str(body["format"]),
+                data_size=request.data_size,
+                features=request.features,
+                data_format=request.format,
+                model_a_type=request.model_a_type,
+                model_b_type=request.model_b_type,
+                train_split=request.train_split,
+                manual_classes=request.manual_classes,
             )
         complete_job(job_id, result)
     except DatasetStorageError as exc:

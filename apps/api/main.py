@@ -88,7 +88,15 @@ def _hash_input(value: str) -> str:
 def _process_comparison_job(job_id: str, request: ComparisonJobCreateRequest) -> None:
     try:
         start_job(job_id)
-        result = build_comparison_result(request.data_size, request.features, request.format)
+        result = build_comparison_result(
+            request.data_size,
+            request.features,
+            request.format,
+            model_a_type=request.model_a_type,
+            model_b_type=request.model_b_type,
+            train_split=request.train_split,
+            manual_classes=request.manual_classes,
+        )
         complete_job(job_id, result)
     except Exception as exc:  # noqa: BLE001
         fail_job(job_id, str(exc))

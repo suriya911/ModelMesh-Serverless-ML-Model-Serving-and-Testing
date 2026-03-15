@@ -1,6 +1,6 @@
 import type { ComparisonResult, ModelMetrics } from "@/lib/ml-api";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from "recharts";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 
 interface Props {
   comparison: ComparisonResult;
@@ -103,10 +103,10 @@ export default function ModelComparisonPanel({ comparison }: Props) {
       <div className="hidden sm:grid sm:grid-cols-[1fr_100px_100px] items-center pb-2 border-b border-border">
         <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">Metric</span>
         <span className="font-mono text-[10px] text-model-a uppercase tracking-wider text-right">
-          Model A<br /><span className="text-[8px] opacity-70">Logistic Reg.</span>
+          Model A<br /><span className="text-[8px] opacity-70">{a.display_name}</span>
         </span>
         <span className="font-mono text-[10px] text-model-b uppercase tracking-wider text-right">
-          Model B<br /><span className="text-[8px] opacity-70">Random Forest</span>
+          Model B<br /><span className="text-[8px] opacity-70">{b.display_name}</span>
         </span>
       </div>
 
@@ -166,13 +166,13 @@ export default function ModelComparisonPanel({ comparison }: Props) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-card border border-border rounded-md p-4">
           <h4 className="font-mono text-[10px] text-model-a uppercase tracking-wider mb-3">
-            Model A — Confusion Matrix
+            Model A — {a.display_name}
           </h4>
           <ConfusionMatrix matrix={a.confusion_matrix} color="model-a" />
         </div>
         <div className="bg-card border border-border rounded-md p-4">
           <h4 className="font-mono text-[10px] text-model-b uppercase tracking-wider mb-3">
-            Model B — Confusion Matrix
+            Model B — {b.display_name}
           </h4>
           <ConfusionMatrix matrix={b.confusion_matrix} color="model-b" />
         </div>
