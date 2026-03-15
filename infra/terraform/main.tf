@@ -28,6 +28,10 @@ locals {
   use_managed_redis = var.deployment_target == "ec2" && var.enable_managed_redis
   use_local_redis   = var.deployment_target == "ec2" && var.enable_local_redis
   enable_alarms     = var.deployment_target == "ec2" && var.enable_cloudwatch_alarms
+  cors_allowed_origins = [
+    for origin in split(",", var.allowed_origins) : trimspace(origin)
+    if trimspace(origin) != ""
+  ]
   effective_database_url = local.use_rds ? format(
     "postgresql+psycopg://%s:%s@%s:5432/%s",
     var.db_username,
@@ -64,6 +68,18 @@ resource "aws_s3_bucket_public_access_block" "datasets" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_cors_configuration" "datasets" {
+  bucket = aws_s3_bucket.datasets.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "HEAD", "PUT"]
+    allowed_origins = local.cors_allowed_origins
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
 }
 
 resource "aws_sqs_queue" "comparison_jobs" {
