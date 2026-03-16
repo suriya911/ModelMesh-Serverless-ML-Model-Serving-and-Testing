@@ -38,7 +38,11 @@ locals {
     var.db_password,
     aws_db_instance.postgres[0].address,
     var.db_name
-  ) : var.database_url
+  ) : (
+    var.deployment_target == "ec2" && var.database_url == "sqlite:///./modelmesh.db" ?
+    "sqlite:////opt/modelmesh/data/modelmesh.db" :
+    var.database_url
+  )
   effective_redis_url = local.use_managed_redis ? format(
     "redis://%s:6379/0",
     aws_elasticache_replication_group.redis[0].primary_endpoint_address
@@ -149,6 +153,7 @@ resource "aws_apprunner_service" "api" {
           COMPARISON_QUEUE_URL = local.effective_comparison_queue_url
           KAGGLE_USERNAME      = var.kaggle_username
           KAGGLE_KEY           = var.kaggle_key
+          API_KEYS             = var.api_keys
           HF_API_TOKEN         = var.hf_api_token
         }
       }
@@ -372,7 +377,7 @@ resource "aws_elasticache_replication_group" "redis" {
 resource "aws_instance" "api" {
   count                  = var.deployment_target == "ec2" ? 1 : 0
   ami                    = data.aws_ami.amazon_linux_2023.id
-  instance_type          = "t3.small"
+  instance_type          = var.ec2_instance_type
   subnet_id              = tolist(data.aws_subnets.default.ids)[0]
   vpc_security_group_ids = [aws_security_group.ec2_api[0].id]
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile[0].name
@@ -399,6 +404,7 @@ resource "aws_instance" "api" {
     fi
 
     mkdir -p /opt/modelmesh
+    mkdir -p /opt/modelmesh/data
     cat > /opt/modelmesh/.env <<'ENVVARS'
     HF_API_TOKEN=${var.hf_api_token}
     HF_PROVIDER=${var.hf_provider}
@@ -411,13 +417,14 @@ resource "aws_instance" "api" {
     AWS_REGION=${data.aws_region.current.name}
     KAGGLE_USERNAME=${var.kaggle_username}
     KAGGLE_KEY=${var.kaggle_key}
+    API_KEYS=${var.api_keys}
     ENVVARS
 
     docker pull "$IMAGE"
     docker rm -f modelmesh-api || true
     docker rm -f modelmesh-worker || true
-    docker run -d --name modelmesh-api --restart unless-stopped --env-file /opt/modelmesh/.env -p 80:8000 "$IMAGE"
-    docker run -d --name modelmesh-worker --restart unless-stopped --env-file /opt/modelmesh/.env "$IMAGE" python -m apps.worker.main
+    docker run -d --name modelmesh-api --restart unless-stopped --env-file /opt/modelmesh/.env -v /opt/modelmesh/data:/opt/modelmesh/data -p 80:8000 "$IMAGE"
+    docker run -d --name modelmesh-worker --restart unless-stopped --env-file /opt/modelmesh/.env -v /opt/modelmesh/data:/opt/modelmesh/data "$IMAGE" python -m apps.worker.main
   EOT
 }
 

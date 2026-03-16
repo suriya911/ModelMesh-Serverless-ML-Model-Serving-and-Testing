@@ -107,6 +107,7 @@ class ComparisonJobCreateRequest(BaseModel):
 
 class ComparisonJob(BaseModel):
     job_id: str
+    tenant_id: Optional[str] = None
     status: Literal["queued", "running", "completed", "failed"]
     result: ComparisonResult | None = None
     dataset_name: Optional[str] = None
@@ -134,3 +135,21 @@ class ModelRecord(BaseModel):
     hf_repo_id: str
     task_type: str
     status: Literal["active", "inactive"]
+
+
+class TenantUsage(BaseModel):
+    predictions_used: int
+    comparisons_used: int
+    uploads_used: int
+
+
+class TenantQuota(BaseModel):
+    predictions_limit: int
+    comparisons_limit: int
+    uploads_limit: int
+
+
+class AuthStatusResponse(BaseModel):
+    tenant_id: str
+    usage: TenantUsage
+    quota: TenantQuota

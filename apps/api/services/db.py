@@ -7,7 +7,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Boolean, DateTime, Integer, Text, String, create_engine, inspect, select
+from sqlalchemy import Boolean, DateTime, Integer, Text, String, UniqueConstraint, create_engine, inspect, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 
@@ -74,6 +74,7 @@ class ComparisonJobORM(Base):
     __tablename__ = "comparison_jobs"
 
     job_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True, default="demo")
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     dataset_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     dataset_s3_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -84,6 +85,18 @@ class ComparisonJobORM(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+
+
+class TenantUsageORM(Base):
+    __tablename__ = "tenant_usage"
+    __table_args__ = (UniqueConstraint("tenant_id", "usage_date", name="uq_tenant_usage_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    usage_date: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
+    predictions_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    comparisons_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    uploads_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 def init_db() -> None:
@@ -164,6 +177,26 @@ def get_comparison_job(session: Session, job_id: str) -> ComparisonJobORM | None
     return session.get(ComparisonJobORM, job_id)
 
 
-def list_comparison_jobs(session: Session, limit: int = 20) -> list[ComparisonJobORM]:
-    stmt = select(ComparisonJobORM).order_by(ComparisonJobORM.created_at.desc()).limit(limit)
+def list_comparison_jobs(session: Session, tenant_id: str | None = None, limit: int = 20) -> list[ComparisonJobORM]:
+    stmt = select(ComparisonJobORM)
+    if tenant_id:
+        stmt = stmt.where(ComparisonJobORM.tenant_id == tenant_id)
+    stmt = stmt.order_by(ComparisonJobORM.created_at.desc()).limit(limit)
     return list(session.scalars(stmt))
+
+
+def get_tenant_usage(session: Session, tenant_id: str, usage_date: str) -> TenantUsageORM | None:
+    stmt = select(TenantUsageORM).where(
+        TenantUsageORM.tenant_id == tenant_id,
+        TenantUsageORM.usage_date == usage_date,
+    )
+    return session.scalar(stmt)
+
+
+def get_or_create_tenant_usage(session: Session, tenant_id: str, usage_date: str) -> TenantUsageORM:
+    row = get_tenant_usage(session, tenant_id, usage_date)
+    if row is None:
+        row = TenantUsageORM(tenant_id=tenant_id, usage_date=usage_date)
+        session.add(row)
+        session.flush()
+    return row

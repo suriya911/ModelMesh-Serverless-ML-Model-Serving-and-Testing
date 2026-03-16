@@ -16,6 +16,7 @@ def _timestamp() -> str:
 def _to_job(row: ComparisonJobORM) -> ComparisonJob:
     return ComparisonJob(
         job_id=row.job_id,
+        tenant_id=row.tenant_id,
         status=row.status,
         dataset_name=row.dataset_name,
         dataset_s3_key=row.dataset_s3_key,
@@ -26,11 +27,12 @@ def _to_job(row: ComparisonJobORM) -> ComparisonJob:
     )
 
 
-def create_job(job_id: str, request: ComparisonJobCreateRequest) -> ComparisonJob:
+def create_job(job_id: str, request: ComparisonJobCreateRequest, tenant_id: str) -> ComparisonJob:
     now = datetime.now(UTC).replace(tzinfo=None)
     with session_scope() as session:
         row = ComparisonJobORM(
             job_id=job_id,
+            tenant_id=tenant_id,
             status="queued",
             dataset_name=request.dataset_name,
             dataset_s3_key=request.dataset_s3_key,
@@ -77,15 +79,17 @@ def fail_job(job_id: str, error_message: str) -> None:
         row.updated_at = datetime.now(UTC).replace(tzinfo=None)
 
 
-def fetch_job(job_id: str) -> ComparisonJob | None:
+def fetch_job(job_id: str, tenant_id: str | None = None) -> ComparisonJob | None:
     with session_scope() as session:
         row = get_comparison_job(session, job_id)
+        if row is not None and tenant_id is not None and row.tenant_id != tenant_id:
+            return None
         return _to_job(row) if row is not None else None
 
 
-def fetch_jobs(limit: int = 20) -> list[ComparisonJob]:
+def fetch_jobs(limit: int = 20, tenant_id: str | None = None) -> list[ComparisonJob]:
     with session_scope() as session:
-        return [_to_job(row) for row in list_comparison_jobs(session, limit=limit)]
+        return [_to_job(row) for row in list_comparison_jobs(session, tenant_id=tenant_id, limit=limit)]
 
 
 def build_comparison_result(

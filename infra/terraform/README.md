@@ -1,13 +1,23 @@
-# Terraform: EC2 + RDS + CloudFront Deployment
+# Terraform: Demo-Budget EC2 + S3 + SQS Deployment
 
 This Terraform config supports:
 
 - `deployment_target = "ec2"` (default): EC2 backend, optional RDS Postgres, optional CloudFront HTTPS
 - `deployment_target = "apprunner"`: App Runner backend
 - managed ElastiCache Redis on EC2 (`enable_managed_redis = true`) for runtime cache/metrics state
-- optional local Redis sidecar (`enable_local_redis = true`) for low-cost fallback/dev
+- local Redis sidecar (`enable_local_redis = true`) for the low-cost mode
+- S3 dataset uploads and SQS comparison jobs
+- API key auth + per-tenant daily quotas
 
-For your account (App Runner subscription error), use the EC2 path.
+For your account and budget target, use the EC2 path with:
+
+- `ec2_instance_type = "t3.micro"`
+- `enable_rds = false`
+- `enable_managed_redis = false`
+- `enable_local_redis = true`
+- `enable_cloudfront_https = true`
+
+That keeps the live demo around a single micro instance plus low-traffic S3/SQS/CloudFront costs.
 
 ## Prerequisites
 
@@ -31,16 +41,22 @@ Copy-Item terraform.tfvars.example terraform.tfvars
 Set at minimum in `terraform.tfvars`:
 
 - `deployment_target = "ec2"`
+- `ec2_instance_type = "t3.micro"`
 - `allowed_origins = "https://model-mesh-serverless-ml-model-serv.vercel.app"`
 - `hf_api_token = "..."`
-- `enable_rds = true`
-- `db_password = "strong_password_here"`
+- `api_keys = "demo:modelmesh-demo-key:1000:50:100"`
+- `enable_rds = false`
 - `enable_cloudfront_https = true`
-- `enable_managed_redis = true`
-- `redis_multi_az = true`
-- `enable_local_redis = false`
+- `enable_managed_redis = false`
+- `enable_local_redis = true`
 - `enable_cloudwatch_alarms = true`
 - `alert_email = "you@example.com"` if you want SNS email notifications
+
+If you later need managed persistence:
+
+- set `enable_rds = true`
+- set `enable_managed_redis = true`
+- set `enable_local_redis = false`
 
 ## 3. Init Terraform and create ECR first
 
@@ -86,6 +102,7 @@ When `enable_cloudfront_https = true`, `backend_url` will be:
 Set in Vercel:
 
 - `VITE_API_BASE_URL = <terraform output backend_url>`
+- `VITE_API_KEY = modelmesh-demo-key` or your custom frontend key
 
 If you still use the temporary Vercel proxy:
 
@@ -96,9 +113,10 @@ Redeploy Vercel.
 ## 7. Validate
 
 - `GET <backend_url>/health`
-- `GET <backend_url>/v1/models`
+- `GET <backend_url>/v1/models` with `X-API-Key`
 - Run one live inference from the Vercel dashboard
 - Confirm logs in `GET <backend_url>/v1/system/logs`
+- Open `System` in the frontend and confirm tenant quota counters are visible
 
 ## Every Rebuild Checklist
 

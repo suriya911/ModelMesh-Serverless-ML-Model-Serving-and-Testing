@@ -6,9 +6,10 @@ from time import perf_counter
 from uuid import uuid4
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from apps.api.services.auth import AuthContext, require_api_key
 from apps.api.services.comparison_jobs import (
     build_comparison_result,
     complete_job,
@@ -32,8 +33,10 @@ from apps.api.services.prediction_logs import create_log, list_logs as list_pers
 from apps.api.services.queue import QueuePublishError, enqueue_comparison_job, queue_enabled
 from apps.api.services.runtime_state import RuntimeStateStore
 from apps.api.services.storage import DatasetStorageError, create_dataset_upload
+from apps.api.services.tenant_usage import enforce_and_increment_usage, get_auth_status
 
 from shared.schemas.contracts import (
+    AuthStatusResponse,
     ComparisonJob,
     ComparisonJobCreateRequest,
     DatasetUploadRequest,
@@ -129,26 +132,33 @@ def health() -> dict[str, str]:
 
 
 @app.get("/v1/models", response_model=list[ModelRecord])
-def list_models() -> list[ModelRecord]:
+def list_models(_: AuthContext = Depends(require_api_key)) -> list[ModelRecord]:
     return list_registered_models()
 
 
+@app.get("/v1/auth/me", response_model=AuthStatusResponse)
+def auth_me(context: AuthContext = Depends(require_api_key)) -> AuthStatusResponse:
+    return get_auth_status(context)
+
+
 @app.post("/v1/uploads/datasets", response_model=DatasetUploadResponse)
-def create_dataset_upload_url(request: DatasetUploadRequest) -> DatasetUploadResponse:
+def create_dataset_upload_url(request: DatasetUploadRequest, context: AuthContext = Depends(require_api_key)) -> DatasetUploadResponse:
     try:
+        enforce_and_increment_usage(context, "uploads")
         return create_dataset_upload(request.file_name, request.content_type)
     except DatasetStorageError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @app.post("/v1/predictions", response_model=PredictionResult)
-def create_prediction(request: PredictionRequest) -> PredictionResult:
+def create_prediction(request: PredictionRequest, context: AuthContext = Depends(require_api_key)) -> PredictionResult:
     input_hash = _hash_input(request.input)
     target_model = request.model_id or ("model_a" if int(input_hash[:1], 16) % 2 == 0 else "model_b")
     cache_key = f"{input_hash}:{target_model}"
 
     cached = _runtime_state.get_cached_prediction(cache_key)
     if cached:
+        enforce_and_increment_usage(context, "predictions")
         cached_result = cached.model_copy(
             update={
                 "id": f"pred_{uuid4().hex[:10]}",
@@ -182,6 +192,7 @@ def create_prediction(request: PredictionRequest) -> PredictionResult:
         timestamp=_timestamp(),
         cached=False,
     )
+    enforce_and_increment_usage(context, "predictions")
     _runtime_state.set_cached_prediction(cache_key, result)
     _runtime_state.record_prediction(target_model, latency_ms=latency, cached=False, success=True)
     _append_log(result, input_hash)
@@ -189,17 +200,21 @@ def create_prediction(request: PredictionRequest) -> PredictionResult:
 
 
 @app.get("/v1/system/metrics", response_model=SystemMetrics)
-def get_metrics() -> SystemMetrics:
+def get_metrics(_: AuthContext = Depends(require_api_key)) -> SystemMetrics:
     return _runtime_state.get_metrics()
 
 
 @app.get("/v1/system/logs", response_model=list[LogEntry])
-def get_logs() -> list[LogEntry]:
+def get_logs(_: AuthContext = Depends(require_api_key)) -> list[LogEntry]:
     return list_persisted_logs(limit=20)
 
 
 @app.post("/v1/comparisons", response_model=ComparisonJob)
-def create_comparison(request: ComparisonJobCreateRequest, background_tasks: BackgroundTasks) -> ComparisonJob:
+def create_comparison(
+    request: ComparisonJobCreateRequest,
+    background_tasks: BackgroundTasks,
+    context: AuthContext = Depends(require_api_key),
+) -> ComparisonJob:
     effective_request = request
     if request.kaggle_url:
         try:
@@ -217,7 +232,8 @@ def create_comparison(request: ComparisonJobCreateRequest, background_tasks: Bac
         )
 
     job_id = f"cmp_{uuid4().hex[:10]}"
-    job = create_job(job_id, effective_request)
+    enforce_and_increment_usage(context, "comparisons")
+    job = create_job(job_id, effective_request, context.tenant_id)
     if queue_enabled():
         try:
             enqueue_comparison_job(job_id, effective_request)
@@ -230,8 +246,8 @@ def create_comparison(request: ComparisonJobCreateRequest, background_tasks: Bac
 
 
 @app.get("/v1/comparisons/{job_id}", response_model=ComparisonJob)
-def get_comparison(job_id: str) -> ComparisonJob:
-    job = fetch_job(job_id)
+def get_comparison(job_id: str, context: AuthContext = Depends(require_api_key)) -> ComparisonJob:
+    job = fetch_job(job_id, tenant_id=context.tenant_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Comparison job not found")
     return job

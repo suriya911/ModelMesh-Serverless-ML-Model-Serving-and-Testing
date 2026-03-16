@@ -60,3 +60,8 @@ output "database_url" {
   description = "Effective database URL used by the backend."
   sensitive   = true
 }
+
+output "effective_redis_url" {
+  value       = local.effective_redis_url
+  description = "Effective Redis URL used by the backend."
+}

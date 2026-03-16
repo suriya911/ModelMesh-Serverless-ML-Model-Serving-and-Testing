@@ -90,6 +90,7 @@ jobs:
           terraform import -input=false \
             -var="allowed_origins=${{ vars.ALLOWED_ORIGINS }}" \
             -var="hf_api_token=${{ secrets.HF_API_TOKEN }}" \
+            -var="api_keys=${{ secrets.API_KEYS }}" \
             -var="kaggle_username=${{ secrets.KAGGLE_USERNAME }}" \
             -var="kaggle_key=${{ secrets.KAGGLE_KEY }}" \
             -var="db_password=${{ secrets.DB_PASSWORD }}" \
@@ -113,8 +114,23 @@ jobs:
           docker push "${ECR_URI}:${IMAGE_TAG}"
 
       - name: Terraform apply full stack
+        env:
+          DATABASE_URL_VAR: ${{ vars.DATABASE_URL }}
+          REDIS_URL_VAR: ${{ vars.REDIS_URL }}
+          ENABLE_RDS_VAR: ${{ vars.ENABLE_RDS }}
+          ENABLE_CLOUDFRONT_HTTPS_VAR: ${{ vars.ENABLE_CLOUDFRONT_HTTPS }}
+          ENABLE_MANAGED_REDIS_VAR: ${{ vars.ENABLE_MANAGED_REDIS }}
+          ENABLE_LOCAL_REDIS_VAR: ${{ vars.ENABLE_LOCAL_REDIS }}
+          EC2_INSTANCE_TYPE_VAR: ${{ vars.EC2_INSTANCE_TYPE }}
         working-directory: infra/terraform
         run: |
+          DATABASE_URL="${DATABASE_URL_VAR:-sqlite:///./modelmesh.db}"
+          REDIS_URL="${REDIS_URL_VAR:-}"
+          ENABLE_RDS="${ENABLE_RDS_VAR:-false}"
+          ENABLE_CLOUDFRONT_HTTPS="${ENABLE_CLOUDFRONT_HTTPS_VAR:-true}"
+          ENABLE_MANAGED_REDIS="${ENABLE_MANAGED_REDIS_VAR:-false}"
+          ENABLE_LOCAL_REDIS="${ENABLE_LOCAL_REDIS_VAR:-true}"
+          EC2_INSTANCE_TYPE="${EC2_INSTANCE_TYPE_VAR:-t3.micro}"
           terraform apply -auto-approve -lock-timeout=10m \
             -var="aws_region=${{ vars.AWS_REGION }}" \
             -var="service_name=${{ vars.SERVICE_NAME }}" \
@@ -132,10 +148,13 @@ jobs:
             -var="db_allocated_storage=${{ vars.DB_ALLOCATED_STORAGE }}" \
             -var="hf_provider=${{ vars.HF_PROVIDER }}" \
             -var="hf_timeout_seconds=${{ vars.HF_TIMEOUT_SECONDS }}" \
-            -var="database_url=${{ vars.DATABASE_URL }}" \
-            -var="redis_url=${{ vars.REDIS_URL }}" \
-            -var="enable_rds=${{ vars.ENABLE_RDS }}" \
-            -var="enable_cloudfront_https=${{ vars.ENABLE_CLOUDFRONT_HTTPS }}"
+            -var="database_url=${DATABASE_URL}" \
+            -var="redis_url=${REDIS_URL}" \
+            -var="enable_rds=${ENABLE_RDS}" \
+            -var="enable_cloudfront_https=${ENABLE_CLOUDFRONT_HTTPS}" \
+            -var="enable_managed_redis=${ENABLE_MANAGED_REDIS}" \
+            -var="enable_local_redis=${ENABLE_LOCAL_REDIS}" \
+            -var="ec2_instance_type=${EC2_INSTANCE_TYPE}"
 
       - name: Read backend_url output
         id: backend_url
@@ -162,10 +181,11 @@ jobs:
           HF_TIMEOUT_SECONDS: ${{ vars.HF_TIMEOUT_SECONDS }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          API_KEYS: ${{ secrets.API_KEYS }}
         working-directory: infra/terraform
         run: |
           DATABASE_URL="$(terraform output -raw database_url)"
-          REDIS_ENDPOINT="$(terraform output -raw redis_endpoint)"
+          REDIS_URL="$(terraform output -raw effective_redis_url)"
           DATASET_BUCKET_NAME="$(terraform output -raw dataset_bucket_name)"
           COMPARISON_QUEUE_URL="$(terraform output -raw comparison_queue_url)"
           ECR_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY_NAME}"
@@ -176,25 +196,28 @@ jobs:
             --parameters commands="[
               \"set -euxo pipefail\",
               \"mkdir -p /opt/modelmesh\",
+              \"mkdir -p /opt/modelmesh/data\",
               \"cat > /opt/modelmesh/.env <<'ENVVARS'\",
               \"HF_API_TOKEN=${HF_API_TOKEN}\",
               \"HF_PROVIDER=${HF_PROVIDER}\",
               \"HF_TIMEOUT_SECONDS=${HF_TIMEOUT_SECONDS}\",
               \"DATABASE_URL=${DATABASE_URL}\",
-              \"REDIS_URL=redis://${REDIS_ENDPOINT}:6379/0\",
+              \"REDIS_URL=${REDIS_URL}\",
               \"DATASET_BUCKET=${DATASET_BUCKET_NAME}\",
               \"COMPARISON_QUEUE_URL=${COMPARISON_QUEUE_URL}\",
               \"ALLOWED_ORIGINS=${ALLOWED_ORIGINS}\",
               \"AWS_REGION=${AWS_REGION}\",
               \"KAGGLE_USERNAME=${KAGGLE_USERNAME}\",
               \"KAGGLE_KEY=${KAGGLE_KEY}\",
+              \"API_KEYS=${API_KEYS}\",
               \"ENVVARS\",
               \"aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com\",
+              \"if [ \\\"${REDIS_URL}\\\" = \\\"redis://127.0.0.1:6379/0\\\" ]; then docker rm -f modelmesh-redis || true; docker run -d --name modelmesh-redis --restart unless-stopped -p 127.0.0.1:6379:6379 redis:7-alpine; fi\",
               \"docker pull ${ECR_URI}:${IMAGE_TAG}\",
               \"docker rm -f modelmesh-api || true\",
               \"docker rm -f modelmesh-worker || true\",
-              \"docker run -d --name modelmesh-api --restart unless-stopped --env-file /opt/modelmesh/.env -p 80:8000 ${ECR_URI}:${IMAGE_TAG}\",
-              \"docker run -d --name modelmesh-worker --restart unless-stopped --env-file /opt/modelmesh/.env ${ECR_URI}:${IMAGE_TAG} python -m apps.worker.main\"
+              \"docker run -d --name modelmesh-api --restart unless-stopped --env-file /opt/modelmesh/.env -v /opt/modelmesh/data:/opt/modelmesh/data -p 80:8000 ${ECR_URI}:${IMAGE_TAG}\",
+              \"docker run -d --name modelmesh-worker --restart unless-stopped --env-file /opt/modelmesh/.env -v /opt/modelmesh/data:/opt/modelmesh/data ${ECR_URI}:${IMAGE_TAG} python -m apps.worker.main\"
             ]" \
             --query "Command.CommandId" \
             --output text)
@@ -206,6 +229,7 @@ jobs:
       - name: Smoke test backend API
         env:
           BACKEND_URL: ${{ steps.backend_url.outputs.backend_url }}
+          APP_API_KEY: ${{ vars.FRONTEND_API_KEY }}
         run: |
           python - <<'PY'
           import json
@@ -223,6 +247,9 @@ jobs:
           def request(path: str, method: str = "GET", body: dict | None = None, timeout: int = 60):
               data = None
               headers = {}
+              api_key = os.environ.get("APP_API_KEY", "").strip() or "modelmesh-demo-key"
+              if api_key:
+                  headers["X-API-Key"] = api_key
               if body is not None:
                   data = json.dumps(body).encode("utf-8")
                   headers["Content-Type"] = "application/json"
@@ -325,12 +352,16 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           BACKEND_URL: ${{ steps.latest_backend.outputs.backend_url }}
+          FRONTEND_API_KEY: ${{ vars.FRONTEND_API_KEY }}
         run: |
           vercel pull --yes --environment=production --token "$VERCEL_TOKEN"
           vercel env rm VITE_API_BASE_URL production --yes --token "$VERCEL_TOKEN" || true
           printf "%s" "$BACKEND_URL" | vercel env add VITE_API_BASE_URL production --token "$VERCEL_TOKEN"
           vercel env rm BACKEND_URL production --yes --token "$VERCEL_TOKEN" || true
           printf "%s" "$BACKEND_URL" | vercel env add BACKEND_URL production --token "$VERCEL_TOKEN"
+          KEY_VALUE="${FRONTEND_API_KEY:-modelmesh-demo-key}"
+          vercel env rm VITE_API_KEY production --yes --token "$VERCEL_TOKEN" || true
+          printf "%s" "$KEY_VALUE" | vercel env add VITE_API_KEY production --token "$VERCEL_TOKEN"
 
       - name: Trigger Vercel production deploy
         env:

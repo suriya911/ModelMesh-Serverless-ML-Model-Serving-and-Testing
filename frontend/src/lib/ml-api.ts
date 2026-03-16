@@ -105,6 +105,20 @@ export interface LogEntry {
   cached: boolean;
 }
 
+export interface AuthStatus {
+  tenant_id: string;
+  usage: {
+    predictions_used: number;
+    comparisons_used: number;
+    uploads_used: number;
+  };
+  quota: {
+    predictions_limit: number;
+    comparisons_limit: number;
+    uploads_limit: number;
+  };
+}
+
 const EMPTY_METRICS: SystemMetrics = {
   requests: 0,
   avg_latency: 0,
@@ -143,6 +157,14 @@ export async function getLogs(): Promise<LogEntry[]> {
     return await apiRequest<LogEntry[]>("/v1/system/logs");
   } catch {
     return [];
+  }
+}
+
+export async function getAuthStatus(): Promise<AuthStatus | null> {
+  try {
+    return await apiRequest<AuthStatus>("/v1/auth/me");
+  } catch {
+    return null;
   }
 }
 

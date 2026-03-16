@@ -64,6 +64,13 @@ variable "database_url" {
   default     = "sqlite:///./modelmesh.db"
 }
 
+variable "api_keys" {
+  description = "Semicolon-separated tenant auth config: tenant_id:api_key:predictions_limit:comparisons_limit:uploads_limit."
+  type        = string
+  default     = "demo:modelmesh-demo-key:1000:50:100"
+  sensitive   = true
+}
+
 variable "redis_url" {
   description = "Redis URL for backend runtime cache/metrics."
   type        = string
@@ -73,7 +80,7 @@ variable "redis_url" {
 variable "enable_managed_redis" {
   description = "Enable managed ElastiCache Redis for backend runtime state."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "redis_node_type" {
@@ -108,7 +115,7 @@ variable "deployment_target" {
 variable "enable_rds" {
   description = "Enable RDS PostgreSQL for EC2 deployment."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "db_name" {
@@ -150,7 +157,13 @@ variable "enable_cloudfront_https" {
 variable "enable_local_redis" {
   description = "Enable local Redis container on EC2 and wire REDIS_URL."
   type        = bool
-  default     = false
+  default     = true
+}
+
+variable "ec2_instance_type" {
+  description = "EC2 instance type for API/worker host."
+  type        = string
+  default     = "t3.micro"
 }
 
 variable "enable_cloudwatch_alarms" {
